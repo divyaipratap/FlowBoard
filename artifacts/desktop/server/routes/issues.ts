@@ -1,0 +1,152 @@
+import { Router, type IRouter } from "express";
+import { randomUUID } from "crypto";
+import { eq, sql } from "drizzle-orm";
+import { getDb } from "../db";
+import { issuesTable, commentsTable, projectsTable } from "../schema";
+import {
+  CreateIssueBody,
+  CreateIssueParams,
+  GetIssueParams,
+  UpdateIssueParams,
+  UpdateIssueBody,
+  DeleteIssueParams,
+  ListIssuesParams,
+  ListIssuesQueryParams,
+  ListCommentsParams,
+  CreateCommentParams,
+  CreateCommentBody,
+  DeleteCommentParams,
+} from "@workspace/api-zod";
+
+const router: IRouter = Router();
+
+function parseLabels(raw: string): string[] {
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function issueKey(projectKey: string, num: number) {
+  return `${projectKey}-${num}`;
+}
+
+router.get("/projects/:projectId/issues", async (req, res) => {
+  const db = getDb();
+  const { projectId } = ListIssuesParams.parse(req.params);
+  const query = ListIssuesQueryParams.parse(req.query);
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) return res.status(404).json({ error: "Not found" });
+
+  let issues = await db.select().from(issuesTable).where(eq(issuesTable.projectId, projectId));
+  if (query.status) issues = issues.filter((i) => i.status === query.status);
+  if (query.priority) issues = issues.filter((i) => i.priority === query.priority);
+  if (query.type) issues = issues.filter((i) => i.type === query.type);
+  if (query.assignee) issues = issues.filter((i) => i.assignee === query.assignee);
+  if (query.search) { const s = query.search.toLowerCase(); issues = issues.filter((i) => i.title.toLowerCase().includes(s)); }
+
+  const commentCounts = await db
+    .select({ issueId: commentsTable.issueId, count: sql<number>`count(*)` })
+    .from(commentsTable)
+    .groupBy(commentsTable.issueId);
+  const cMap = Object.fromEntries(commentCounts.map((c) => [c.issueId, Number(c.count)]));
+
+  res.json(issues.map((i) => ({ ...i, labels: parseLabels(i.labels), issueKey: issueKey(project.key, i.issueNumber), commentCount: cMap[i.id] ?? 0 })));
+});
+
+router.post("/projects/:projectId/issues", async (req, res) => {
+  const db = getDb();
+  const { projectId } = CreateIssueParams.parse(req.params);
+  const body = CreateIssueBody.parse(req.body);
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) return res.status(404).json({ error: "Not found" });
+
+  const [maxRow] = await db
+    .select({ max: sql<number>`coalesce(max(issue_number), 0)` })
+    .from(issuesTable)
+    .where(eq(issuesTable.projectId, projectId));
+  const issueNumber = Number(maxRow?.max ?? 0) + 1;
+
+  const [issue] = await db
+    .insert(issuesTable)
+    .values({
+      id: randomUUID(),
+      projectId,
+      issueNumber,
+      title: body.title,
+      description: body.description,
+      status: body.status ?? "todo",
+      priority: body.priority ?? "medium",
+      type: body.type ?? "task",
+      assignee: body.assignee,
+      reporter: body.reporter ?? "You",
+      labels: JSON.stringify(body.labels ?? []),
+    })
+    .returning();
+
+  res.status(201).json({ ...issue, labels: parseLabels(issue.labels), issueKey: issueKey(project.key, issueNumber), commentCount: 0 });
+});
+
+router.get("/issues/:issueId", async (req, res) => {
+  const db = getDb();
+  const { issueId } = GetIssueParams.parse(req.params);
+  const [issue] = await db.select().from(issuesTable).where(eq(issuesTable.id, issueId));
+  if (!issue) return res.status(404).json({ error: "Not found" });
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, issue.projectId));
+  const comments = await db.select().from(commentsTable).where(eq(commentsTable.issueId, issueId)).orderBy(commentsTable.createdAt);
+
+  res.json({ ...issue, labels: parseLabels(issue.labels), issueKey: issueKey(project?.key ?? "PROJ", issue.issueNumber), commentCount: comments.length, comments });
+});
+
+router.patch("/issues/:issueId", async (req, res) => {
+  const db = getDb();
+  const { issueId } = UpdateIssueParams.parse(req.params);
+  const body = UpdateIssueBody.parse(req.body);
+
+  const update: Record<string, unknown> = { ...body, updatedAt: new Date() };
+  if (body.labels) update.labels = JSON.stringify(body.labels);
+
+  const [updated] = await db.update(issuesTable).set(update as any).where(eq(issuesTable.id, issueId)).returning();
+  if (!updated) return res.status(404).json({ error: "Not found" });
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, updated.projectId));
+  const [cnt] = await db.select({ count: sql<number>`count(*)` }).from(commentsTable).where(eq(commentsTable.issueId, issueId));
+
+  res.json({ ...updated, labels: parseLabels(updated.labels), issueKey: issueKey(project?.key ?? "PROJ", updated.issueNumber), commentCount: Number(cnt?.count ?? 0) });
+});
+
+router.delete("/issues/:issueId", async (req, res) => {
+  const db = getDb();
+  const { issueId } = DeleteIssueParams.parse(req.params);
+  await db.delete(commentsTable).where(eq(commentsTable.issueId, issueId));
+  await db.delete(issuesTable).where(eq(issuesTable.id, issueId));
+  res.status(204).send();
+});
+
+router.get("/issues/:issueId/comments", async (req, res) => {
+  const db = getDb();
+  const { issueId } = ListCommentsParams.parse(req.params);
+  const comments = await db.select().from(commentsTable).where(eq(commentsTable.issueId, issueId)).orderBy(commentsTable.createdAt);
+  res.json(comments);
+});
+
+router.post("/issues/:issueId/comments", async (req, res) => {
+  const db = getDb();
+  const { issueId } = CreateCommentParams.parse(req.params);
+  const body = CreateCommentBody.parse(req.body);
+  const [comment] = await db
+    .insert(commentsTable)
+    .values({ id: randomUUID(), issueId, content: body.content, author: body.author })
+    .returning();
+  await db.update(issuesTable).set({ updatedAt: new Date() }).where(eq(issuesTable.id, issueId));
+  res.status(201).json(comment);
+});
+
+router.delete("/comments/:commentId", async (req, res) => {
+  const db = getDb();
+  const { commentId } = DeleteCommentParams.parse(req.params);
+  await db.delete(commentsTable).where(eq(commentsTable.id, commentId));
+  res.status(204).send();
+});
+
+export default router;
