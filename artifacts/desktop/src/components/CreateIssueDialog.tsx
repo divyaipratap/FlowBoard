@@ -11,24 +11,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCreateIssue, getListIssuesQueryKey, IssueStatus, IssuePriority, IssueType } from "@workspace/api-client-react";
+import { useCreateIssue, getGetProjectSummaryQueryKey, getGetPulseTodayQueryKey, getListIssuesQueryKey, IssuePriority, IssueType } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getTypeIcon } from "./IssueCard";
+import { getTypeIcon } from "./issue-visuals";
+import { getCurrentUserName } from "@/lib/profile";
+import { DEFAULT_STATUSES, getStatusLabel } from "@/lib/statuses";
 
 interface CreateIssueDialogProps {
   projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  defaultStatus?: IssueStatus;
+  defaultStatus?: string;
+  statuses?: Array<{ id: string; title: string; color: string }>;
 }
 
-export const CreateIssueDialog = ({ projectId, open, onOpenChange, defaultStatus }: CreateIssueDialogProps) => {
+export const CreateIssueDialog = ({ projectId, open, onOpenChange, defaultStatus, statuses }: CreateIssueDialogProps) => {
+  const statusOptions = React.useMemo(
+    () => statuses?.length ? statuses : DEFAULT_STATUSES.map((status) => ({ id: status.name, title: getStatusLabel(status.name), color: status.color })),
+    [statuses]
+  );
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState<IssueType>(IssueType.task);
   const [priority, setPriority] = useState<IssuePriority>(IssuePriority.medium);
-  const [status, setStatus] = useState<IssueStatus>(defaultStatus || IssueStatus.todo);
+  const [status, setStatus] = useState<string>(defaultStatus || statusOptions[0]?.id || "todo");
   const [assignee, setAssignee] = useState("");
 
   const queryClient = useQueryClient();
@@ -37,14 +44,15 @@ export const CreateIssueDialog = ({ projectId, open, onOpenChange, defaultStatus
   // Reset state when opened with new defaults
   React.useEffect(() => {
     if (open) {
-      setStatus(defaultStatus || IssueStatus.todo);
+      const currentUserName = getCurrentUserName();
+      setStatus(defaultStatus || statusOptions[0]?.id || "todo");
       setTitle("");
       setDescription("");
       setType(IssueType.task);
       setPriority(IssuePriority.medium);
-      setAssignee("");
+      setAssignee(currentUserName);
     }
-  }, [open, defaultStatus]);
+  }, [open, defaultStatus, statusOptions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,12 +68,14 @@ export const CreateIssueDialog = ({ projectId, open, onOpenChange, defaultStatus
           priority: priority as any,
           status: status as any,
           assignee: assignee || undefined,
-          reporter: "You",
+          reporter: getCurrentUserName(),
         },
       },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListIssuesQueryKey(projectId) });
+          queryClient.invalidateQueries({ queryKey: getGetProjectSummaryQueryKey(projectId) });
+          queryClient.invalidateQueries({ queryKey: getGetPulseTodayQueryKey() });
           toast.success("Issue created");
           onOpenChange(false);
         },
@@ -78,7 +88,7 @@ export const CreateIssueDialog = ({ projectId, open, onOpenChange, defaultStatus
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] bg-[#141414] border-border text-foreground">
+      <DialogContent className="glass-panel sm:max-w-[600px] text-foreground">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Create New Issue</DialogTitle>
@@ -118,14 +128,14 @@ export const CreateIssueDialog = ({ projectId, open, onOpenChange, defaultStatus
 
               <div className="grid gap-2">
                 <Label className="text-xs text-muted-foreground uppercase">Status</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as IssueStatus)}>
+                <Select value={status} onValueChange={setStatus}>
                   <SelectTrigger className="bg-[#0a0a0a]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.values(IssueStatus).map((s) => (
-                      <SelectItem key={s} value={s}>
-                        <span className="capitalize">{s.replace("_", " ")}</span>
+                    {statusOptions.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <span className="capitalize">{s.title}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -165,7 +175,7 @@ export const CreateIssueDialog = ({ projectId, open, onOpenChange, defaultStatus
               <Input
                 value={assignee}
                 onChange={(e) => setAssignee(e.target.value)}
-                placeholder="e.g. John Doe"
+                placeholder={getCurrentUserName()}
                 className="bg-[#0a0a0a]"
               />
             </div>

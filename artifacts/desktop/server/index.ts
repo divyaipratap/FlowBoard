@@ -4,6 +4,11 @@ import net from "net";
 import { initDb } from "./db";
 import projectsRouter from "./routes/projects";
 import issuesRouter from "./routes/issues";
+import aiRouter from "./routes/ai";
+import pulseRouter from "./routes/pulse";
+import dataRouter from "./routes/data";
+import agentBridgeRouter from "./routes/agentBridge";
+import { eventsRouter } from "./events";
 
 interface ServerOptions {
   dbPath: string;
@@ -29,26 +34,33 @@ function getAvailablePort(preferred: number): Promise<number> {
 }
 
 export async function startServer({ dbPath, rendererPath, port }: ServerOptions): Promise<number> {
+  process.env.FLOWBOARD_DB_PATH = dbPath;
   initDb(dbPath);
 
   const app = express();
   const resolvedPort = await getAvailablePort(port);
+  process.env.FLOWBOARD_SERVER_PORT = String(resolvedPort);
 
-  app.use(express.json());
+  app.use(express.json({ limit: "12mb" }));
 
   app.use("/api", projectsRouter);
   app.use("/api", issuesRouter);
+  app.use("/api", aiRouter);
+  app.use("/api", pulseRouter);
+  app.use("/api", dataRouter);
+  app.use("/api", agentBridgeRouter);
+  app.use("/api", eventsRouter);
 
   app.get("/api/healthz", (_req, res) => res.json({ status: "ok" }));
 
   app.use(express.static(rendererPath));
 
-  app.get("*", (_req, res) => {
+  app.get("/{*splat}", (_req, res) => {
     res.sendFile(path.join(rendererPath, "index.html"));
   });
 
   await new Promise<void>((resolve, reject) => {
-    const server = app.listen(resolvedPort, "127.0.0.1", resolve);
+    const server = app.listen(resolvedPort, "127.0.0.1", () => resolve());
     server.on("error", reject);
   });
 

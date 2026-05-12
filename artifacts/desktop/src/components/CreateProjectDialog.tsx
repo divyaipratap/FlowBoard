@@ -10,10 +10,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCreateProject, getListProjectsQueryKey } from "@workspace/api-client-react";
+import { useCreateProject, getGetPulseTodayQueryKey, getListProjectsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { Plus, Trash2 } from "lucide-react";
+import { DEFAULT_STATUSES, LocalStatus } from "@/lib/statuses";
 
 const PRESET_COLORS = [
   "#8b5cf6", // Violet
@@ -32,6 +34,7 @@ export const CreateProjectDialog = ({ children }: { children: React.ReactNode })
   const [key, setKey] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(PRESET_COLORS[0]);
+  const [statuses, setStatuses] = useState<LocalStatus[]>(DEFAULT_STATUSES);
   
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -60,17 +63,19 @@ export const CreateProjectDialog = ({ children }: { children: React.ReactNode })
 
     createProject.mutate(
       {
-        data: { name, key, description, color },
+        data: { name, key, description, color, statuses },
       },
       {
         onSuccess: (newProject) => {
           queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetPulseTodayQueryKey() });
           toast.success("Project created");
           setOpen(false);
           setName("");
           setKey("");
           setDescription("");
           setColor(PRESET_COLORS[0]);
+          setStatuses(DEFAULT_STATUSES);
           setLocation(`/projects/${newProject.id}`);
         },
         onError: () => {
@@ -83,7 +88,7 @@ export const CreateProjectDialog = ({ children }: { children: React.ReactNode })
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] bg-[#141414] border-border text-foreground">
+      <DialogContent className="glass-panel sm:max-w-[560px] text-foreground">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Create New Project</DialogTitle>
@@ -137,6 +142,49 @@ export const CreateProjectDialog = ({ children }: { children: React.ReactNode })
                   />
                 ))}
               </div>
+            </div>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Status columns</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setStatuses((items) => [...items, { name: "blocked", color: "#ef4444", position: items.length }])}
+                >
+                  <Plus size={14} />
+                  Add status
+                </Button>
+              </div>
+              <div className="space-y-2 rounded-lg border border-white/10 bg-background/35 p-2">
+                {statuses.map((status, index) => (
+                  <div key={index} className="grid grid-cols-[1fr_110px_auto] gap-2">
+                    <Input
+                      value={status.name}
+                      onChange={(event) => setStatuses((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))}
+                      placeholder="Status name"
+                      className="bg-[#0a0a0a]"
+                    />
+                    <Input
+                      type="color"
+                      value={status.color}
+                      onChange={(event) => setStatuses((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, color: event.target.value } : item))}
+                      className="h-10 bg-[#0a0a0a] p-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={statuses.length <= 1}
+                      onClick={() => setStatuses((items) => items.filter((_, itemIndex) => itemIndex !== index).map((item, itemIndex) => ({ ...item, position: itemIndex })))}
+                    >
+                      <Trash2 size={15} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Rename defaults or add states like blocked. The last status is treated as completed.</p>
             </div>
           </div>
           <DialogFooter>

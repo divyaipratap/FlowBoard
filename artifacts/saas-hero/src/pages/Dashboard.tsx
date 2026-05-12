@@ -4,6 +4,7 @@ import { useListProjects } from "@workspace/api-client-react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CreateProjectDialog } from "../components/CreateProjectDialog";
+import flowboardLockup from "@/assets/brand/flowboard-primary-lockup-transparent.png";
 
 export const Dashboard = () => {
   const { data: projects, isLoading } = useListProjects();
@@ -25,11 +26,7 @@ export const Dashboard = () => {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto">
-      <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(139,92,246,0.3)]">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-xl">
-          F
-        </div>
-      </div>
+      <img src={flowboardLockup} alt="FlowBoard" className="mb-6 h-20 w-auto object-contain" />
       <h1 className="text-3xl font-bold tracking-tight mb-3">Welcome to FlowBoard</h1>
       <p className="text-muted-foreground mb-8">
         Get started by creating your first project to organize your tasks, bugs, and workflows.

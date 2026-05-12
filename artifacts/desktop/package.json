@@ -1,7 +1,7 @@
 {
   "name": "@workspace/desktop",
   "version": "1.0.0",
-  "description": "FlowBoard — Local Project Management",
+  "description": "FlowBoard - Local Project Management",
   "private": true,
   "main": "dist/main/index.js",
   "scripts": {
@@ -11,26 +11,48 @@
     "build": "pnpm run build:renderer && pnpm run build:main",
     "make": "pnpm run build && electron-builder",
     "make:win": "pnpm run build && electron-builder --win",
+    "make:win:unsigned": "pnpm run build && electron-builder --win --config.win.signAndEditExecutable=false",
     "make:mac": "pnpm run build && electron-builder --mac",
+    "make:mac:unsigned": "pnpm run build && electron-builder --mac --config.mac.identity=null",
     "make:linux": "pnpm run build && electron-builder --linux",
     "dev": "node dev.mjs",
+    "test:agent-bridge": "node scripts/run-agent-bridge-tests.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",
     "@workspace/api-zod": "workspace:*",
-    "better-sqlite3": "^9.4.3",
+    "better-sqlite3": "^12.9.0",
     "drizzle-orm": "catalog:",
     "express": "^5"
   },
   "devDependencies": {
+    "@radix-ui/react-accordion": "^1.2.12",
+    "@radix-ui/react-alert-dialog": "^1.1.15",
+    "@radix-ui/react-aspect-ratio": "^1.1.8",
     "@radix-ui/react-avatar": "^1.1.4",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-collapsible": "^1.1.12",
+    "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-dialog": "^1.1.7",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-hover-card": "^1.1.15",
     "@radix-ui/react-label": "^2.1.3",
+    "@radix-ui/react-menubar": "^1.1.16",
+    "@radix-ui/react-navigation-menu": "^1.2.14",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-progress": "^1.1.8",
+    "@radix-ui/react-radio-group": "^1.3.8",
     "@radix-ui/react-scroll-area": "^1.2.4",
     "@radix-ui/react-select": "^2.1.7",
     "@radix-ui/react-separator": "^1.1.3",
+    "@radix-ui/react-slider": "^1.3.6",
     "@radix-ui/react-slot": "^1.2.0",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@radix-ui/react-toggle": "^1.1.10",
+    "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.0",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
@@ -42,14 +64,21 @@
     "@vitejs/plugin-react": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
+    "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "electron": "^35.2.1",
     "electron-builder": "^25.1.8",
+    "embla-carousel-react": "^8.6.0",
     "esbuild": "catalog:",
     "framer-motion": "catalog:",
+    "input-otp": "^1.4.2",
     "lucide-react": "catalog:",
     "react": "catalog:",
+    "react-day-picker": "^9.14.0",
     "react-dom": "catalog:",
+    "react-hook-form": "^7.71.2",
+    "react-resizable-panels": "^2.1.9",
+    "recharts": "^2.15.4",
     "sonner": "^2.0.3",
     "tailwind-merge": "catalog:",
     "tailwindcss": "catalog:",
@@ -72,22 +101,53 @@
       "node_modules/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "dist/main/mcp.js"
+    ],
     "extraResources": [
       {
         "from": "dist/renderer",
         "to": "renderer",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
       }
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.productivity"
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

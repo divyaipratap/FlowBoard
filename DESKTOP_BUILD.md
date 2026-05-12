@@ -21,6 +21,9 @@ It bundles an Express API server with SQLite (no PostgreSQL needed) and runs com
 
 > **Note**: You must build on the target platform.
 > Cross-compilation is not supported for native modules (better-sqlite3).
+>
+> For downloadable release artifacts, run the `Desktop Release` GitHub Actions workflow.
+> It builds the Windows `.exe` on a Windows runner and the macOS `.dmg` on a macOS runner.
 
 ---
 
@@ -41,9 +44,19 @@ pnpm install
 pnpm --filter @workspace/desktop run make:mac
 ```
 
+Unsigned local macOS build:
+```bash
+pnpm --filter @workspace/desktop run make:mac:unsigned
+```
+
 **Windows → `.exe` (NSIS installer):**
 ```bash
 pnpm --filter @workspace/desktop run make:win
+```
+
+Unsigned local Windows build:
+```bash
+pnpm --filter @workspace/desktop run make:win:unsigned
 ```
 
 **Linux → `.AppImage`:**

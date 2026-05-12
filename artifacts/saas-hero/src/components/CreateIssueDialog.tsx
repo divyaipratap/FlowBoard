@@ -11,10 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCreateIssue, getListIssuesQueryKey, IssueStatus, IssuePriority, IssueType } from "@workspace/api-client-react";
+import { useCreateIssue, getListIssuesQueryKey, IssuePriority, IssueType } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getTypeIcon } from "./IssueCard";
+import { getTypeIcon } from "./issue-visuals";
+import { IssueStatus } from "@/lib/issue-status";
 
 interface CreateIssueDialogProps {
   projectId: string;

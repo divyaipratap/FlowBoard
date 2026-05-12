@@ -5,6 +5,7 @@ import { Plus, LayoutDashboard, Settings } from "lucide-react";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import flowboardIcon from "@/assets/brand/flowboard-icon-transparent.png";
 
 export const Sidebar = () => {
   const { data: projects, isLoading } = useListProjects();
@@ -13,8 +14,8 @@ export const Sidebar = () => {
   return (
     <div className="w-64 h-screen border-r border-border bg-[#0a0a0a] flex flex-col flex-shrink-0">
       <div className="p-4 flex items-center gap-2 mb-4">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold shadow-[0_0_15px_rgba(139,92,246,0.5)]">
-          F
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white shadow-[0_0_15px_rgba(20,184,166,0.35)]">
+          <img src={flowboardIcon} alt="" className="h-7 w-7 object-contain" />
         </div>
         <span className="font-semibold text-lg tracking-tight text-white">FlowBoard</span>
       </div>
@@ -71,10 +72,19 @@ export const Sidebar = () => {
       </div>
       
       <div className="p-4 mt-auto border-t border-border">
-        <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-white">
-          <Settings size={16} />
-          Settings
-        </Button>
+        <Link href="/settings">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start gap-2 ${
+              location === "/settings"
+                ? "bg-secondary text-white"
+                : "text-muted-foreground hover:text-white"
+            }`}
+          >
+            <Settings size={16} />
+            Settings
+          </Button>
+        </Link>
       </div>
     </div>
   );

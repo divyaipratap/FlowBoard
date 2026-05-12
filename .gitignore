@@ -2,6 +2,8 @@
 
 # compiled output
 dist
+build
+release
 tmp
 out-tsc
 *.tsbuildinfo
@@ -10,6 +12,7 @@ out-tsc
 
 # dependencies
 node_modules
+.pnpm-store/
 
 # IDEs and editors
 /.idea
@@ -32,6 +35,11 @@ node_modules
 /connect.lock
 /coverage
 /libpeerconnection.log
+*.log
+*.err.log
+*.exe
+.mcp.json
+zip
 npm-debug.log
 yarn-error.log
 testem.log

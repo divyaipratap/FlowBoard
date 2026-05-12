@@ -12,10 +12,22 @@ tags:
     description: Health operations
   - name: projects
     description: Project operations
+  - name: statuses
+    description: Project status operations
   - name: issues
     description: Issue/ticket operations
   - name: comments
     description: Comment operations
+  - name: attachments
+    description: Issue attachment operations
+  - name: pulse
+    description: Pulse planning operations
+  - name: flow-sessions
+    description: Focus session operations
+  - name: daily-review
+    description: End-of-day review operations
+  - name: data
+    description: Local data management operations
 
 paths:
   /healthz:
@@ -138,6 +150,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectSummary"
+
+  /projects/{projectId}/statuses:
+    get:
+      operationId: listProjectStatuses
+      tags: [statuses]
+      summary: List project statuses
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of project statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectStatus"
+    put:
+      operationId: updateProjectStatuses
+      tags: [statuses]
+      summary: Replace project statuses
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectStatusesBody"
+      responses:
+        "200":
+          description: Updated project statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectStatus"
 
   /projects/{projectId}/issues:
     get:
@@ -319,6 +377,163 @@ paths:
         "204":
           description: Deleted
 
+  /issues/{issueId}/attachments:
+    get:
+      operationId: listAttachments
+      tags: [attachments]
+      summary: List attachments on an issue
+      parameters:
+        - name: issueId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of attachments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attachment"
+    post:
+      operationId: createAttachment
+      tags: [attachments]
+      summary: Attach a file to an issue
+      parameters:
+        - name: issueId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAttachmentBody"
+      responses:
+        "201":
+          description: Created attachment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attachment"
+
+  /attachments/{attachmentId}:
+    delete:
+      operationId: deleteAttachment
+      tags: [attachments]
+      summary: Delete an attachment
+      parameters:
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /pulse/today:
+    get:
+      operationId: getPulseToday
+      tags: [pulse]
+      summary: Get today's Pulse plan
+      responses:
+        "200":
+          description: Pulse plan for today
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PulseTodayResponse"
+
+  /pulse/recompute:
+    post:
+      operationId: recomputePulse
+      tags: [pulse]
+      summary: Recompute Pulse scores
+      responses:
+        "200":
+          description: Recomputed pulse scores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PulseRecomputeResponse"
+
+  /flow-sessions/start:
+    post:
+      operationId: startFlowSession
+      tags: [flow-sessions]
+      summary: Start a flow session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartFlowSessionRequest"
+      responses:
+        "200":
+          description: Started flow session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartFlowSessionResponse"
+
+  /flow-sessions/{id}/stop:
+    post:
+      operationId: stopFlowSession
+      tags: [flow-sessions]
+      summary: Stop a flow session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StopFlowSessionRequest"
+      responses:
+        "200":
+          description: Stopped flow session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StopFlowSessionResponse"
+
+  /daily-review:
+    post:
+      operationId: saveDailyReview
+      tags: [daily-review]
+      summary: Save daily review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveDailyReviewRequest"
+      responses:
+        "200":
+          description: Saved daily review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveDailyReviewResponse"
+
+  /data:
+    delete:
+      operationId: deleteAllData
+      tags: [data]
+      summary: Delete all local app data
+      responses:
+        "204":
+          description: Deleted all local data
+
 components:
   schemas:
     HealthStatus:
@@ -360,6 +575,10 @@ components:
           type: string
         color:
           type: string
+        statuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectStatusInput"
       required: [name, key]
 
     UpdateProjectBody:
@@ -397,6 +616,46 @@ components:
             $ref: "#/components/schemas/Issue"
       required: [projectId, totalIssues, byStatus, byPriority, byType, recentActivity]
 
+    ProjectStatus:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+        position:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, name, color, position, createdAt]
+
+    ProjectStatusInput:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+        position:
+          type: integer
+      required: [name, color, position]
+
+    UpdateProjectStatusesBody:
+      type: object
+      properties:
+        statuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectStatusInput"
+      required: [statuses]
+
     Issue:
       type: object
       properties:
@@ -411,7 +670,6 @@ components:
           type: string
         status:
           type: string
-          enum: [todo, in_progress, in_review, done]
         priority:
           type: string
           enum: [low, medium, high, critical]
@@ -460,7 +718,6 @@ components:
           type: string
         status:
           type: string
-          enum: [todo, in_progress, in_review, done]
         priority:
           type: string
           enum: [low, medium, high, critical]
@@ -486,7 +743,6 @@ components:
           type: string
         status:
           type: string
-          enum: [todo, in_progress, in_review, done]
         priority:
           type: string
           enum: [low, medium, high, critical]
@@ -524,3 +780,256 @@ components:
         author:
           type: string
       required: [content, author]
+
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+        issueId:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        kind:
+          type: string
+          enum: [image, text]
+        sizeBytes:
+          type: integer
+        content:
+          type: string
+          description: Data URL for images, plain text for text files
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, issueId, fileName, mimeType, kind, sizeBytes, content, createdAt]
+
+    CreateAttachmentBody:
+      type: object
+      properties:
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        kind:
+          type: string
+          enum: [image, text]
+        sizeBytes:
+          type: integer
+        content:
+          type: string
+      required: [fileName, mimeType, kind, sizeBytes, content]
+
+    PulseTask:
+      type: object
+      properties:
+        issueId:
+          type: string
+        projectId:
+          type: string
+        issueKey:
+          type: string
+        title:
+          type: string
+        projectName:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+        dueDate:
+          type: string
+          nullable: true
+        reason:
+          type: string
+        order:
+          type: integer
+        estimateBlocks:
+          type: integer
+        score:
+          type: integer
+      required: [issueId, projectId, issueKey, title, projectName, priority, status, reason, order, estimateBlocks, score]
+
+    ProjectNextAction:
+      type: object
+      properties:
+        projectId:
+          type: string
+        projectName:
+          type: string
+        action:
+          type: string
+        reason:
+          type: string
+        issueId:
+          type: string
+          nullable: true
+        issueKey:
+          type: string
+          nullable: true
+        issueTitle:
+          type: string
+          nullable: true
+      required: [projectId, projectName, action, reason]
+
+    PulseRisk:
+      type: object
+      properties:
+        type:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high]
+        title:
+          type: string
+        description:
+          type: string
+        suggestedFix:
+          type: string
+        projectId:
+          type: string
+          nullable: true
+        issueIds:
+          type: array
+          items:
+            type: string
+      required: [type, severity, title, description, suggestedFix, issueIds]
+
+    PulseTodayResponse:
+      type: object
+      properties:
+        date:
+          type: string
+        topTasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/PulseTask"
+        projectNextActions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectNextAction"
+        risks:
+          type: array
+          items:
+            $ref: "#/components/schemas/PulseRisk"
+        reviewPrompt:
+          type: string
+      required: [date, topTasks, projectNextActions, risks, reviewPrompt]
+
+    PulseRecomputeResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        computedAt:
+          type: string
+          format: date-time
+      required: [ok, computedAt]
+
+    FlowSession:
+      type: object
+      properties:
+        id:
+          type: string
+        issueId:
+          type: string
+          nullable: true
+        projectId:
+          type: string
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, startedAt, createdAt, updatedAt]
+
+    DailyReview:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        completedIssueIds:
+          type: array
+          items:
+            type: string
+        carriedIssueIds:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, date, completedIssueIds, carriedIssueIds, createdAt, updatedAt]
+
+    StartFlowSessionRequest:
+      type: object
+      properties:
+        issueId:
+          type: string
+      required: [issueId]
+
+    StartFlowSessionResponse:
+      type: object
+      properties:
+        session:
+          $ref: "#/components/schemas/FlowSession"
+      required: [session]
+
+    StopFlowSessionRequest:
+      type: object
+      properties:
+        note:
+          type: string
+
+    StopFlowSessionResponse:
+      type: object
+      properties:
+        session:
+          $ref: "#/components/schemas/FlowSession"
+      required: [session]
+
+    SaveDailyReviewRequest:
+      type: object
+      properties:
+        date:
+          type: string
+        summary:
+          type: string
+        completedIssueIds:
+          type: array
+          items:
+            type: string
+        carriedIssueIds:
+          type: array
+          items:
+            type: string
+      required: [date]
+
+    SaveDailyReviewResponse:
+      type: object
+      properties:
+        review:
+          $ref: "#/components/schemas/DailyReview"
+      required: [review]

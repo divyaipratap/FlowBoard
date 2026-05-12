@@ -1,46 +1,15 @@
 import React from "react";
 import { Link } from "wouter";
-import { Issue, IssuePriority, IssueType } from "@workspace/api-client-react";
-import { Bug, Zap, CheckSquare, BookOpen, MessageSquare } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Issue } from "@workspace/api-client-react";
+import { MessageSquare } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { motion } from "framer-motion";
-
-export const getTypeIcon = (type: IssueType, size = 16) => {
-  switch (type) {
-    case IssueType.bug:
-      return <Bug size={size} className="text-red-400" />;
-    case IssueType.feature:
-      return <Zap size={size} className="text-violet-400" />;
-    case IssueType.task:
-      return <CheckSquare size={size} className="text-blue-400" />;
-    case IssueType.story:
-      return <BookOpen size={size} className="text-green-400" />;
-    default:
-      return <CheckSquare size={size} />;
-  }
-};
-
-export const getPriorityColor = (priority: IssuePriority) => {
-  switch (priority) {
-    case IssuePriority.critical:
-      return "text-red-500 bg-red-500/10 border-red-500/20";
-    case IssuePriority.high:
-      return "text-orange-500 bg-orange-500/10 border-orange-500/20";
-    case IssuePriority.medium:
-      return "text-blue-500 bg-blue-500/10 border-blue-500/20";
-    case IssuePriority.low:
-      return "text-gray-400 bg-gray-500/10 border-gray-500/20";
-    default:
-      return "text-gray-400";
-  }
-};
+import { getPriorityColor, getTypeIcon } from "./issue-visuals";
 
 export const IssueCard = ({ issue, projectId }: { issue: Issue; projectId: string }) => {
   return (
     <Link href={`/projects/${projectId}/issues/${issue.id}`}>
-      <motion.div
-        layoutId={issue.id}
+      <div
         className="bg-[#141414] border border-white/5 rounded-lg p-4 cursor-pointer hover:border-primary/40 hover:bg-[#1a1a1a] transition-all group shadow-sm hover:shadow-[0_0_15px_rgba(139,92,246,0.15)] relative overflow-hidden"
       >
         <div className="flex justify-between items-start mb-2 gap-2">
@@ -74,7 +43,7 @@ export const IssueCard = ({ issue, projectId }: { issue: Issue; projectId: strin
             </Badge>
           </div>
         </div>
-      </motion.div>
+      </div>
     </Link>
   );
 };

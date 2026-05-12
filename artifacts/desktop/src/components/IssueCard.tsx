@@ -1,67 +1,62 @@
 import React from "react";
 import { Link } from "wouter";
-import { Issue, IssuePriority, IssueType } from "@workspace/api-client-react";
-import { Bug, Zap, CheckSquare, BookOpen, MessageSquare } from "lucide-react";
+import { Issue } from "@workspace/api-client-react";
+import { Clock3, MessageSquare } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { motion } from "framer-motion";
-
-export const getTypeIcon = (type: IssueType, size = 16) => {
-  switch (type) {
-    case IssueType.bug:
-      return <Bug size={size} className="text-red-400" />;
-    case IssueType.feature:
-      return <Zap size={size} className="text-violet-400" />;
-    case IssueType.task:
-      return <CheckSquare size={size} className="text-blue-400" />;
-    case IssueType.story:
-      return <BookOpen size={size} className="text-green-400" />;
-    default:
-      return <CheckSquare size={size} />;
-  }
-};
-
-export const getPriorityColor = (priority: IssuePriority) => {
-  switch (priority) {
-    case IssuePriority.critical:
-      return "text-red-500 bg-red-500/10 border-red-500/20";
-    case IssuePriority.high:
-      return "text-orange-500 bg-orange-500/10 border-orange-500/20";
-    case IssuePriority.medium:
-      return "text-blue-500 bg-blue-500/10 border-blue-500/20";
-    case IssuePriority.low:
-      return "text-gray-400 bg-gray-500/10 border-gray-500/20";
-    default:
-      return "text-gray-400";
-  }
-};
+import { getInitials } from "@/lib/profile";
+import { getPriorityColor, getTypeIcon } from "./issue-visuals";
 
 export const IssueCard = ({ issue, projectId }: { issue: Issue; projectId: string }) => {
+  const issueWithDetails = issue as Issue & { description?: string };
+  const labels = Array.isArray(issue.labels) ? issue.labels.slice(0, 2) : [];
+  const updatedAt = issue.updatedAt ? new Date(issue.updatedAt) : null;
+  const updatedLabel = updatedAt && !Number.isNaN(updatedAt.getTime())
+    ? updatedAt.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : "";
+
   return (
     <Link href={`/projects/${projectId}/issues/${issue.id}`}>
-      <motion.div
-        layoutId={issue.id}
-        className="bg-[#141414] border border-white/5 rounded-lg p-4 cursor-pointer hover:border-primary/40 hover:bg-[#1a1a1a] transition-all group shadow-sm hover:shadow-[0_0_15px_rgba(139,92,246,0.15)] relative overflow-hidden"
+      <div
+        className="glass-card group relative cursor-pointer overflow-hidden rounded-lg p-4 transition-all hover:-translate-y-0.5 hover:border-accent/45 hover:bg-white/10 hover:shadow-[0_18px_44px_rgba(6,182,212,0.14)]"
       >
+        <div className={`absolute inset-x-0 top-0 h-0.5 ${getPriorityColor(issue.priority).replace("text-", "bg-").split(" ")[0]}`} />
         <div className="flex justify-between items-start mb-2 gap-2">
-          <p className="text-sm font-medium leading-snug line-clamp-2 text-foreground/90 group-hover:text-white transition-colors">
-            {issue.title}
-          </p>
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
+              {getTypeIcon(issue.type, 14)}
+              <span>{issue.issueKey}</span>
+            </div>
+            <p className="text-sm font-medium leading-snug line-clamp-2 text-foreground/90 group-hover:text-white transition-colors">
+              {issue.title}
+            </p>
+          </div>
           <div className="shrink-0 mt-0.5">
             <Avatar className="h-6 w-6 border border-border">
-              <AvatarFallback className="text-[10px] bg-secondary text-muted-foreground">
-                {issue.assignee ? issue.assignee.substring(0, 2).toUpperCase() : "?"}
+              <AvatarFallback className="text-[10px] bg-white/10 text-muted-foreground">
+                {issue.assignee ? getInitials(issue.assignee) : "?"}
               </AvatarFallback>
             </Avatar>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-4">
-          <div className="flex items-center gap-2">
-            {getTypeIcon(issue.type)}
-            <span className="text-xs font-mono text-muted-foreground">{issue.issueKey}</span>
-          </div>
+        {issueWithDetails.description && (
+          <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {issueWithDetails.description}
+          </p>
+        )}
 
+        {labels.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {labels.map((label) => (
+              <Badge key={label} variant="secondary" className="max-w-[120px] truncate px-1.5 py-0 text-[10px]">
+                {label}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mt-4">
           <div className="flex items-center gap-2">
             {issue.commentCount > 0 && (
               <div className="flex items-center gap-1 text-muted-foreground text-xs">
@@ -69,12 +64,20 @@ export const IssueCard = ({ issue, projectId }: { issue: Issue; projectId: strin
                 <span>{issue.commentCount}</span>
               </div>
             )}
-            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border ${getPriorityColor(issue.priority)}`}>
+            {updatedLabel && (
+              <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                <Clock3 size={12} />
+                <span>{updatedLabel}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border backdrop-blur ${getPriorityColor(issue.priority)}`}>
               {issue.priority}
             </Badge>
           </div>
         </div>
-      </motion.div>
+      </div>
     </Link>
   );
 };

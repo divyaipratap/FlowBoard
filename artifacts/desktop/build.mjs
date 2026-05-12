@@ -1,10 +1,7 @@
 import { build as esbuild } from "esbuild";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { rm, mkdirSync } from "node:fs";
 
-globalThis.require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const external = [
@@ -13,27 +10,28 @@ const external = [
   "*.node",
 ];
 
-const banner = {
-  js: `import { createRequire as __cr } from 'node:module';
-import __path from 'node:path';
-import __url from 'node:url';
-globalThis.require = __cr(import.meta.url);
-globalThis.__filename = __url.fileURLToPath(import.meta.url);
-globalThis.__dirname = __path.dirname(globalThis.__filename);
-`,
-};
-
 async function buildAll() {
   // Build main process
   await esbuild({
     entryPoints: [path.resolve(__dirname, "electron/main.ts")],
     bundle: true,
     platform: "node",
-    format: "esm",
+    format: "cjs",
     outfile: path.resolve(__dirname, "dist/main/index.js"),
     external,
     sourcemap: "linked",
-    banner,
+    logLevel: "info",
+  });
+
+  // Build MCP stdio server for Cursor, Codex, and other MCP clients
+  await esbuild({
+    entryPoints: [path.resolve(__dirname, "server/mcp.ts")],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    outfile: path.resolve(__dirname, "dist/main/mcp.js"),
+    external,
+    sourcemap: "linked",
     logLevel: "info",
   });
 

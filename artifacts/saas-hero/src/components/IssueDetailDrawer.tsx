@@ -20,16 +20,16 @@ import {
   getGetIssueQueryKey,
   getListIssuesQueryKey,
   getListCommentsQueryKey,
-  IssueStatus, 
   IssuePriority, 
   IssueType 
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getTypeIcon, getPriorityColor } from "./IssueCard";
+import { getTypeIcon, getPriorityColor } from "./issue-visuals";
 import { X, Trash2, MessageSquare, Loader2, Send } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
+import { IssueStatus } from "@/lib/issue-status";
 
 interface IssueDetailDrawerProps {
   issueId: string | null;
@@ -40,8 +40,13 @@ interface IssueDetailDrawerProps {
 
 export const IssueDetailDrawer = ({ issueId, projectId, open, onOpenChange }: IssueDetailDrawerProps) => {
   const queryClient = useQueryClient();
-  const { data: issue, isLoading } = useGetIssue(issueId || "", { query: { enabled: !!issueId } });
-  const { data: comments } = useListComments(issueId || "", { query: { enabled: !!issueId } });
+  const selectedIssueId = issueId || "";
+  const { data: issue, isLoading } = useGetIssue(selectedIssueId, {
+    query: { queryKey: getGetIssueQueryKey(selectedIssueId), enabled: !!issueId },
+  });
+  const { data: comments } = useListComments(selectedIssueId, {
+    query: { queryKey: getListCommentsQueryKey(selectedIssueId), enabled: !!issueId },
+  });
   
   const updateIssue = useUpdateIssue();
   const deleteIssue = useDeleteIssue();

@@ -36,7 +36,10 @@ router.post("/projects", async (req, res) => {
 router.get("/projects/:projectId", async (req, res) => {
   const { projectId } = GetProjectParams.parse(req.params);
   const project = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  if (!project.length) return res.status(404).json({ error: "Not found" });
+  if (!project.length) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
   const [count] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(issuesTable)
@@ -52,7 +55,10 @@ router.patch("/projects/:projectId", async (req, res) => {
     .set({ name: body.name, description: body.description, color: body.color })
     .where(eq(projectsTable.id, projectId))
     .returning();
-  if (!updated.length) return res.status(404).json({ error: "Not found" });
+  if (!updated.length) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
   const [count] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(issuesTable)

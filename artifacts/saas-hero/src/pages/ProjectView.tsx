@@ -3,12 +3,6 @@ import { useLocation, useParams } from "wouter";
 import {
   useGetProject,
   useGetProjectSummary,
-  useListIssues,
-  useUpdateIssue,
-  getListIssuesQueryKey,
-  getGetProjectSummaryQueryKey,
-  IssueStatus,
-  Issue,
 } from "@workspace/api-client-react";
 import { KanbanBoard } from "../components/KanbanBoard";
 import { IssueDetailDrawer } from "../components/IssueDetailDrawer";
@@ -21,7 +15,7 @@ export const ProjectView = () => {
   const issueId = pathParams?.startsWith("issues/") ? pathParams.split("/")[1] : null;
 
   const { data: project, isLoading: isLoadingProject } = useGetProject(projectId || "");
-  const { data: summary, isLoading: isLoadingSummary } = useGetProjectSummary(projectId || "");
+  const { data: summary } = useGetProjectSummary(projectId || "");
   
   if (isLoadingProject) {
     return (
@@ -56,7 +50,7 @@ export const ProjectView = () => {
           />
           <div>
             <h1 className="text-xl font-bold tracking-tight">{project.name}</h1>
-            <p className="text-xs text-muted-foreground">{project.key} • {summary?.totalIssues || 0} issues</p>
+            <p className="text-xs text-muted-foreground">{project.key} - {summary?.totalIssues || 0} issues</p>
           </div>
         </div>
       </header>

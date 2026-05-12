@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { useListIssues, useUpdateIssue, Issue, IssueStatus, getListIssuesQueryKey } from "@workspace/api-client-react";
+import { useListIssues, useUpdateIssue, Issue, getListIssuesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { IssueCard } from "./IssueCard";
 import { CreateIssueDialog } from "./CreateIssueDialog";
+import { IssueStatus } from "@/lib/issue-status";
 
 const COLUMNS = [
   { id: IssueStatus.todo, title: "To Do", color: "#6b7280" }, // gray
@@ -56,13 +57,13 @@ export const KanbanBoard = ({ projectId }: { projectId: string }) => {
   };
 
   return (
-    <div className="flex h-full gap-6 h-full pb-4">
+    <div className="flex h-full gap-6 pb-4">
       {COLUMNS.map((col) => (
         <div
           key={col.id}
           className="flex flex-col w-[320px] shrink-0 h-full"
           onDragOver={handleDragOver}
-          onDrop={(e) => handleDrop(e, col.id as IssueStatus)}
+          onDrop={(e) => handleDrop(e, col.id)}
         >
           <div className="flex items-center justify-between mb-4 px-1">
             <div className="flex items-center gap-2">
@@ -76,7 +77,7 @@ export const KanbanBoard = ({ projectId }: { projectId: string }) => {
               </span>
             </div>
             <button
-              onClick={() => setCreateColumnStatus(col.id as IssueStatus)}
+              onClick={() => setCreateColumnStatus(col.id)}
               className="text-muted-foreground hover:text-white transition-colors"
             >
               <Plus size={16} />

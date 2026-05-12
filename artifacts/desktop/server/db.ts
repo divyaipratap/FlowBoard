@@ -39,6 +39,15 @@ export function initDb(dbPath: string): DB {
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
+    CREATE TABLE IF NOT EXISTS project_statuses (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE IF NOT EXISTS comments (
       id TEXT PRIMARY KEY,
       issue_id TEXT NOT NULL,
@@ -46,7 +55,109 @@ export function initDb(dbPath: string): DB {
       author TEXT NOT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS attachments (
+      id TEXT PRIMARY KEY,
+      issue_id TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_sessions (
+      id TEXT PRIMARY KEY,
+      issue_id TEXT,
+      project_id TEXT,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER,
+      note TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_reviews (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL UNIQUE,
+      summary TEXT,
+      completed_issue_ids TEXT NOT NULL DEFAULT '[]',
+      carried_issue_ids TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS issue_signals (
+      issue_id TEXT PRIMARY KEY,
+      last_suggested_at INTEGER,
+      last_started_at INTEGER,
+      local_score INTEGER NOT NULL DEFAULT 0,
+      reason TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_bridge_settings (
+      id TEXT PRIMARY KEY,
+      permission_mode TEXT NOT NULL DEFAULT 'suggest-only',
+      allowed_agents TEXT NOT NULL DEFAULT 'Codex,Cursor,MCP Agent',
+      disable_writes INTEGER NOT NULL DEFAULT 0,
+      permissions TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_audit_log (
+      id TEXT PRIMARY KEY,
+      agent_name TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      issue_id TEXT,
+      project_id TEXT,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL,
+      input TEXT NOT NULL DEFAULT '{}',
+      result TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_inbox_proposals (
+      id TEXT PRIMARY KEY,
+      agent_name TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      proposal_type TEXT NOT NULL,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      issue_id TEXT,
+      project_id TEXT,
+      title TEXT NOT NULL,
+      description TEXT,
+      payload TEXT NOT NULL DEFAULT '{}',
+      resolution TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      resolved_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_worklog_entries (
+      id TEXT PRIMARY KEY,
+      issue_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      changed_files TEXT NOT NULL DEFAULT '[]',
+      commands_run TEXT NOT NULL DEFAULT '[]',
+      tests_run TEXT NOT NULL DEFAULT '[]',
+      follow_ups TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `);
+
+  try {
+    sqlite.exec("ALTER TABLE agent_bridge_settings ADD COLUMN permissions TEXT NOT NULL DEFAULT '{}'");
+  } catch {
+    // Column already exists in databases initialized after this schema was added.
+  }
 
   _db = drizzle(sqlite, { schema });
   return _db;

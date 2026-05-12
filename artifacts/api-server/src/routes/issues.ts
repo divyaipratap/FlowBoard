@@ -28,7 +28,10 @@ router.get("/projects/:projectId/issues", async (req, res) => {
   const query = ListIssuesQueryParams.parse(req.query);
 
   const project = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  if (!project.length) return res.status(404).json({ error: "Not found" });
+  if (!project.length) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
   const projectKey = project[0].key;
 
   let issues = await db.select().from(issuesTable).where(eq(issuesTable.projectId, projectId));
@@ -61,7 +64,10 @@ router.post("/projects/:projectId/issues", async (req, res) => {
   const body = CreateIssueBody.parse(req.body);
 
   const project = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  if (!project.length) return res.status(404).json({ error: "Not found" });
+  if (!project.length) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
   const projectKey = project[0].key;
 
   const [maxNum] = await db
@@ -98,7 +104,10 @@ router.post("/projects/:projectId/issues", async (req, res) => {
 router.get("/issues/:issueId", async (req, res) => {
   const { issueId } = GetIssueParams.parse(req.params);
   const issue = await db.select().from(issuesTable).where(eq(issuesTable.id, issueId)).limit(1);
-  if (!issue.length) return res.status(404).json({ error: "Not found" });
+  if (!issue.length) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   const project = await db.select().from(projectsTable).where(eq(projectsTable.id, issue[0].projectId)).limit(1);
   const projectKey = project[0]?.key ?? "PROJ";
@@ -123,7 +132,10 @@ router.patch("/issues/:issueId", async (req, res) => {
   const body = UpdateIssueBody.parse(req.body);
 
   const existing = await db.select().from(issuesTable).where(eq(issuesTable.id, issueId)).limit(1);
-  if (!existing.length) return res.status(404).json({ error: "Not found" });
+  if (!existing.length) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   const updated = await db
     .update(issuesTable)

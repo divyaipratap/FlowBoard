@@ -39,10 +39,12 @@ console.log(`[dev] Waiting for Vite renderer on port ${RENDERER_PORT}...`);
 waitForServer(`http://localhost:${RENDERER_PORT}`)
   .then(() => {
     console.log("[dev] Renderer ready — launching Electron...");
+    const electronEnv = { ...process.env, NODE_ENV: "development" };
+    delete electronEnv.ELECTRON_RUN_AS_NODE;
     const electron = spawn(
       "pnpm",
       ["electron", "dist/main/index.js"],
-      { stdio: "inherit", shell: true, env: { ...process.env, NODE_ENV: "development" } }
+      { stdio: "inherit", shell: true, env: electronEnv }
     );
     electron.on("close", () => {
       vite.kill();
