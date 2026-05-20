@@ -151,6 +151,33 @@ export function initDb(dbPath: string): DB {
       follow_ups TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS agent_work_proofs (
+      id TEXT PRIMARY KEY,
+      worklog_id TEXT NOT NULL UNIQUE,
+      issue_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      agent_model TEXT,
+      git_commit_sha TEXT,
+      git_diff_hash_before TEXT,
+      git_diff_hash_after TEXT,
+      files_changed TEXT NOT NULL DEFAULT '[]',
+      command_results TEXT NOT NULL DEFAULT '[]',
+      checks TEXT NOT NULL DEFAULT '{}',
+      environment TEXT NOT NULL DEFAULT '{}',
+      verdict TEXT NOT NULL DEFAULT 'unverified',
+      started_at INTEGER,
+      finished_at INTEGER,
+      runtime_ms INTEGER,
+      chain_index INTEGER NOT NULL DEFAULT 0,
+      prev_hash TEXT,
+      proof_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_work_proofs_issue
+      ON agent_work_proofs(issue_id, chain_index);
   `);
 
   try {

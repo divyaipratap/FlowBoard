@@ -8,19 +8,23 @@ import {
   approveAgentInboxProposal,
   listAgentAuditLog,
   listAgentWorklogEntries,
+  listWorkProofsForIssue,
   runFlowBoardTool,
   updateAgentBridgeSettings,
 } from "./agentBridge";
+import { computeProofHash, deriveChecks, deriveVerdict, parseWorkProofInput, verifyChain } from "./workProof";
 import { createMcpConfig, resolveMcpCommandPath } from "./mcpConfig";
 import {
   agentAuditLogTable,
   agentBridgeSettingsTable,
   agentInboxProposalsTable,
   agentWorklogEntriesTable,
+  agentWorkProofsTable,
   commentsTable,
   issuesTable,
   projectsTable,
 } from "./schema";
+import { eq } from "drizzle-orm";
 
 const dbPath = path.join(mkdtempSync(path.join(tmpdir(), "flowboard-agent-bridge-db-")), "test.db");
 initDb(dbPath);
@@ -57,6 +61,7 @@ async function callTool(toolName: string, args: Record<string, unknown>) {
 
 async function resetDb() {
   const db = getDb();
+  await db.delete(agentWorkProofsTable);
   await db.delete(agentWorklogEntriesTable);
   await db.delete(agentInboxProposalsTable);
   await db.delete(agentAuditLogTable);
@@ -252,4 +257,251 @@ test("resolves MCP script beside the bundled main process by default", () => {
   } finally {
     if (previousMcpPath !== undefined) process.env.FLOWBOARD_MCP_PATH = previousMcpPath;
   }
+});
+
+test("parseWorkProofInput returns null when no auditable signal is present", () => {
+  assert.equal(parseWorkProofInput(undefined), null);
+  assert.equal(parseWorkProofInput({}), null);
+  assert.equal(parseWorkProofInput({ agentModel: "claude-opus-4-7" }), null);
+  assert.equal(parseWorkProofInput({ commands: [{ command: "x" }] }), null);
+});
+
+test("deriveVerdict returns green only when every command exits 0", () => {
+  assert.equal(deriveVerdict([]), "unverified");
+  assert.equal(deriveVerdict([{ name: "tests", command: "pnpm test", exitCode: 0, durationMs: null, stdoutTail: "", stderrTail: "" }]), "green");
+  assert.equal(deriveVerdict([
+    { name: "tests", command: "pnpm test", exitCode: 0, durationMs: null, stdoutTail: "", stderrTail: "" },
+    { name: "lint", command: "pnpm lint", exitCode: 1, durationMs: null, stdoutTail: "", stderrTail: "" },
+  ]), "red");
+});
+
+test("deriveChecks records pass/fail/missing per canonical check name", () => {
+  const checks = deriveChecks([
+    { name: "tests", command: "pnpm test", exitCode: 0, durationMs: null, stdoutTail: "", stderrTail: "" },
+    { name: "lint", command: "pnpm lint", exitCode: 2, durationMs: null, stdoutTail: "", stderrTail: "" },
+    { name: "custom", command: "echo", exitCode: 0, durationMs: null, stdoutTail: "", stderrTail: "" },
+  ]);
+  assert.equal(checks.tests, "pass");
+  assert.equal(checks.lint, "fail");
+  assert.equal(checks.typecheck, "missing");
+  assert.equal(checks.build, "missing");
+});
+
+test("trusted attach_work_summary persists a WorkProof and emits a green verdict", async () => {
+  await updateAgentBridgeSettings({
+    permissionMode: "trusted",
+    permissions: partialPermissions({ attachWorkSummaries: "allow" }),
+  });
+
+  const result = await callTool("flowboard_attach_work_summary", {
+    issueId: baseIssue.id,
+    agentName: "Codex",
+    summary: "Implemented X",
+    workProof: {
+      agentModel: "claude-opus-4-7",
+      gitCommitSha: "abc1234567",
+      gitDiffHashAfter: "deadbeefcafebabe",
+      filesChanged: ["server/x.ts"],
+      commands: [
+        { name: "tests", command: "pnpm test", exitCode: 0, durationMs: 4200, stdoutTail: "ok", stderrTail: "" },
+        { name: "lint", command: "pnpm lint", exitCode: 0, durationMs: 1800, stdoutTail: "", stderrTail: "" },
+      ],
+      environment: { os: "darwin", node: "20.10.0" },
+      startedAt: "2026-05-20T10:00:00.000Z",
+      finishedAt: "2026-05-20T10:00:06.000Z",
+    },
+  });
+
+  assert.equal(result.applied, true);
+  assert.ok(result.workProof);
+  assert.equal(result.workProof.verdict, "green");
+  assert.equal(result.workProof.chainIndex, 0);
+  assert.equal(result.workProof.prevHash, null);
+  assert.equal(result.workProof.checks.tests, "pass");
+  assert.equal(result.workProof.checks.lint, "pass");
+  assert.equal(result.workProof.commandResults.length, 2);
+
+  const [worklog] = await listAgentWorklogEntries(baseIssue.id);
+  assert.ok(worklog.workProof);
+  assert.equal(worklog.workProof.id, result.workProof.id);
+});
+
+test("WorkProofs form a hash chain across consecutive attachments", async () => {
+  await updateAgentBridgeSettings({
+    permissionMode: "trusted",
+    permissions: partialPermissions({ attachWorkSummaries: "allow" }),
+  });
+
+  const first = await callTool("flowboard_attach_work_summary", {
+    issueId: baseIssue.id,
+    agentName: "Codex",
+    summary: "Step 1",
+    workProof: { gitDiffHashAfter: "first-diff", commands: [{ name: "tests", command: "pnpm test", exitCode: 0 }] },
+  });
+  const second = await callTool("flowboard_attach_work_summary", {
+    issueId: baseIssue.id,
+    agentName: "Codex",
+    summary: "Step 2",
+    workProof: { gitDiffHashAfter: "second-diff", commands: [{ name: "tests", command: "pnpm test", exitCode: 0 }] },
+  });
+
+  assert.equal(first.workProof.chainIndex, 0);
+  assert.equal(second.workProof.chainIndex, 1);
+  assert.equal(second.workProof.prevHash, first.workProof.proofHash);
+
+  const listing = await listWorkProofsForIssue(baseIssue.id);
+  assert.equal(listing.chainValid, true);
+  assert.equal(listing.proofs.length, 2);
+});
+
+test("tampering with a stored WorkProof field is detected by chain verification", async () => {
+  await updateAgentBridgeSettings({
+    permissionMode: "trusted",
+    permissions: partialPermissions({ attachWorkSummaries: "allow" }),
+  });
+
+  const created = await callTool("flowboard_attach_work_summary", {
+    issueId: baseIssue.id,
+    agentName: "Codex",
+    summary: "Tamper target",
+    workProof: { gitDiffHashAfter: "real-diff", commands: [{ name: "tests", command: "pnpm test", exitCode: 1 }] },
+  });
+  assert.equal(created.workProof.verdict, "red");
+
+  const db = getDb();
+  await db
+    .update(agentWorkProofsTable)
+    .set({ verdict: "green" })
+    .where(eq(agentWorkProofsTable.id, created.workProof.id));
+
+  const listing = await listWorkProofsForIssue(baseIssue.id);
+  assert.equal(listing.chainValid, false);
+  assert.equal(listing.brokenAtChainIndex, 0);
+});
+
+test("verifyChain catches a broken prev_hash link", () => {
+  const proofs = [
+    {
+      id: "a",
+      worklogId: "w1",
+      issueId: "i",
+      projectId: "p",
+      agentName: "A",
+      agentModel: null,
+      gitCommitSha: null,
+      gitDiffHashBefore: null,
+      gitDiffHashAfter: null,
+      filesChanged: [],
+      commandResults: [],
+      checks: { tests: "missing" as const, lint: "missing" as const, typecheck: "missing" as const, build: "missing" as const },
+      environment: {},
+      verdict: "unverified" as const,
+      startedAt: null,
+      finishedAt: null,
+      runtimeMs: null,
+      chainIndex: 0,
+      prevHash: null,
+      proofHash: "",
+      createdAt: new Date(),
+    },
+  ];
+  proofs[0].proofHash = computeProofHash({
+    agentModel: null,
+    agentName: "A",
+    chainIndex: 0,
+    checks: proofs[0].checks,
+    commandResults: [],
+    environment: {},
+    filesChanged: [],
+    finishedAt: null,
+    gitCommitSha: null,
+    gitDiffHashAfter: null,
+    gitDiffHashBefore: null,
+    issueId: "i",
+    prevHash: null,
+    projectId: "p",
+    runtimeMs: null,
+    startedAt: null,
+    verdict: "unverified",
+    worklogId: "w1",
+  });
+
+  assert.equal(verifyChain(proofs).chainValid, true);
+
+  const tampered = [{ ...proofs[0], prevHash: "garbage" }];
+  assert.equal(verifyChain(tampered).chainValid, false);
+});
+
+test("requireGreenWorkProofToMarkDone blocks trusted markDone until a green proof is captured", async () => {
+  await updateAgentBridgeSettings({
+    permissionMode: "trusted",
+    permissions: partialPermissions({
+      attachWorkSummaries: "allow",
+      markDone: "allow",
+      updateStatus: "allow",
+      requireWorkSummaryToMarkDone: false,
+      requireGreenWorkProofToMarkDone: true,
+    }),
+  });
+
+  const blocked = await callTool("flowboard_update_issue_status", {
+    issueId: baseIssue.id,
+    status: "done",
+    agentName: "Codex",
+  });
+  assert.equal(blocked.applied, false);
+  assert.equal(blocked.approvalRequired, true);
+
+  await callTool("flowboard_attach_work_summary", {
+    issueId: baseIssue.id,
+    agentName: "Codex",
+    summary: "Red proof",
+    workProof: { gitDiffHashAfter: "x", commands: [{ name: "tests", command: "pnpm test", exitCode: 1 }] },
+  });
+  const stillBlocked = await callTool("flowboard_update_issue_status", {
+    issueId: baseIssue.id,
+    status: "done",
+    agentName: "Codex",
+  });
+  assert.equal(stillBlocked.applied, false);
+
+  await callTool("flowboard_attach_work_summary", {
+    issueId: baseIssue.id,
+    agentName: "Codex",
+    summary: "Green proof",
+    workProof: { gitDiffHashAfter: "y", commands: [{ name: "tests", command: "pnpm test", exitCode: 0 }] },
+  });
+  const allowed = await callTool("flowboard_update_issue_status", {
+    issueId: baseIssue.id,
+    status: "done",
+    agentName: "Codex",
+  });
+  assert.equal(allowed.applied, true);
+  assert.equal(allowed.issue.status, "done");
+});
+
+test("suggest-only WorkProof rides the proposal payload and persists on approval", async () => {
+  await updateAgentBridgeSettings({
+    permissionMode: "suggest-only",
+    permissions: partialPermissions({ attachWorkSummaries: "approval" }),
+  });
+
+  const suggested = await callTool("flowboard_attach_work_summary", {
+    issueId: baseIssue.id,
+    agentName: "Codex",
+    summary: "Pending approval",
+    workProof: { gitDiffHashAfter: "abc", commands: [{ name: "tests", command: "pnpm test", exitCode: 0 }] },
+  });
+  assert.equal(suggested.approvalRequired, true);
+  assert.equal(suggested.workProofAttached, true);
+
+  const db = getDb();
+  const beforeApprove = await db.select().from(agentWorkProofsTable);
+  assert.equal(beforeApprove.length, 0);
+
+  await approveAgentInboxProposal(suggested.proposalId);
+
+  const afterApprove = await db.select().from(agentWorkProofsTable);
+  assert.equal(afterApprove.length, 1);
+  assert.equal(afterApprove[0].verdict, "green");
 });

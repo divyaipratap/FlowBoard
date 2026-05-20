@@ -31,7 +31,7 @@ export const FLOWBOARD_MCP_TOOLS = [
   },
   {
     name: "flowboard_attach_work_summary",
-    description: "Attach an implementation summary with changed files, commands, tests, and follow-ups.",
+    description: "Attach an implementation summary with changed files, commands, tests, and follow-ups. Optionally include a verifiable WorkProof: git diff hashes, per-command exit codes, environment fingerprint. A WorkProof with all command exit codes == 0 produces a green 'Verified by FlowBoard' badge and can satisfy the requireGreenWorkProofToMarkDone rule.",
     inputSchema: {
       type: "object",
       properties: {
@@ -43,6 +43,41 @@ export const FLOWBOARD_MCP_TOOLS = [
         testsRun: { type: "array", items: { type: "string" } },
         followUps: { type: "array", items: { type: "string" } },
         agentName: { type: "string" },
+        workProof: {
+          type: "object",
+          description: "Optional verifiable evidence record. Captures auditable execution context so FlowBoard can stamp a Verified badge and gate auto-completion.",
+          properties: {
+            agentModel: { type: "string", description: "Model identifier, e.g. claude-opus-4-7." },
+            gitCommitSha: { type: "string", description: "HEAD commit SHA at the time the proof was captured." },
+            gitDiffHashBefore: { type: "string", description: "Hash of the working-tree diff before the agent's changes." },
+            gitDiffHashAfter: { type: "string", description: "Hash of the working-tree diff after the agent's changes." },
+            filesChanged: { type: "array", items: { type: "string" } },
+            commands: {
+              type: "array",
+              description: "Commands the agent ran. Use canonical names ('tests', 'lint', 'typecheck', 'build') to populate the verified-checks rollup.",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  command: { type: "string" },
+                  exitCode: { type: "number" },
+                  durationMs: { type: "number" },
+                  stdoutTail: { type: "string" },
+                  stderrTail: { type: "string" },
+                },
+                required: ["command", "exitCode"],
+              },
+            },
+            environment: {
+              type: "object",
+              description: "Environment fingerprint, e.g. { os, node, pnpm }.",
+              additionalProperties: { type: "string" },
+            },
+            startedAt: { type: "string", description: "ISO-8601 timestamp." },
+            finishedAt: { type: "string", description: "ISO-8601 timestamp." },
+            runtimeMs: { type: "number" },
+          },
+        },
       },
       required: ["summary"],
     },

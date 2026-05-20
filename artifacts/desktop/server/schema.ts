@@ -173,3 +173,29 @@ export const agentWorklogEntriesTable = sqliteTable("agent_worklog_entries", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+export const agentWorkProofsTable = sqliteTable("agent_work_proofs", {
+  id: text("id").primaryKey(),
+  worklogId: text("worklog_id").notNull().unique(),
+  issueId: text("issue_id").notNull(),
+  projectId: text("project_id").notNull(),
+  agentName: text("agent_name").notNull(),
+  agentModel: text("agent_model"),
+  gitCommitSha: text("git_commit_sha"),
+  gitDiffHashBefore: text("git_diff_hash_before"),
+  gitDiffHashAfter: text("git_diff_hash_after"),
+  filesChanged: text("files_changed").notNull().default("[]"),
+  commandResults: text("command_results").notNull().default("[]"),
+  checks: text("checks").notNull().default("{}"),
+  environment: text("environment").notNull().default("{}"),
+  verdict: text("verdict").notNull().default("unverified"),
+  startedAt: integer("started_at", { mode: "timestamp" }),
+  finishedAt: integer("finished_at", { mode: "timestamp" }),
+  runtimeMs: integer("runtime_ms"),
+  chainIndex: integer("chain_index").notNull().default(0),
+  prevHash: text("prev_hash"),
+  proofHash: text("proof_hash").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});

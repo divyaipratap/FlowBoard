@@ -6,6 +6,7 @@ import {
   listAgentInboxProposals,
   listAgentAuditLog,
   listAgentWorklogEntries,
+  listWorkProofsForIssue,
   mergeAgentInboxProposal,
   rejectAgentInboxProposal,
   runFlowBoardTool,
@@ -41,6 +42,14 @@ router.get("/agent-bridge/audit-log", async (req, res) => {
 router.get("/issues/:issueId/agent-worklog", async (req, res) => {
   try {
     res.json(await listAgentWorklogEntries(req.params.issueId));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get("/issues/:issueId/workproofs", async (req, res) => {
+  try {
+    res.json(await listWorkProofsForIssue(req.params.issueId));
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
   }

@@ -38,7 +38,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getTypeIcon, getPriorityColor } from "./issue-visuals";
-import { X, Trash2, MessageSquare, Loader2, Send, Target, ListPlus, CheckCircle2, Circle, Paperclip, Image as ImageIcon, FileText, Bot, GitBranch, TerminalSquare, FlaskConical } from "lucide-react";
+import { X, Trash2, MessageSquare, Loader2, Send, Target, ListPlus, CheckCircle2, Circle, Paperclip, Image as ImageIcon, FileText, Bot, GitBranch, TerminalSquare, FlaskConical, ShieldCheck, ShieldAlert, ShieldQuestion, ChevronDown, ChevronRight, Fingerprint } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import { getEffortMap, isIssueInFocus, setIssueEffort, toggleFocusIssue } from "@/lib/productivity";
@@ -59,6 +59,42 @@ interface IssueDetailDrawerProps {
   onOpenChange: (open: boolean) => void;
 }
 
+type WorkProofVerdict = "green" | "red" | "unverified";
+
+type WorkProofCheckStatus = "pass" | "fail" | "missing";
+
+type WorkProofCommandResult = {
+  name: string;
+  command: string;
+  exitCode: number;
+  durationMs: number | null;
+  stdoutTail: string;
+  stderrTail: string;
+};
+
+type WorkProofRecord = {
+  id: string;
+  worklogId: string;
+  issueId: string;
+  agentName: string;
+  agentModel: string | null;
+  gitCommitSha: string | null;
+  gitDiffHashBefore: string | null;
+  gitDiffHashAfter: string | null;
+  filesChanged: string[];
+  commandResults: WorkProofCommandResult[];
+  checks: Record<"tests" | "lint" | "typecheck" | "build", WorkProofCheckStatus>;
+  environment: Record<string, string>;
+  verdict: WorkProofVerdict;
+  startedAt: string | null;
+  finishedAt: string | null;
+  runtimeMs: number | null;
+  chainIndex: number;
+  prevHash: string | null;
+  proofHash: string;
+  createdAt: string | number;
+};
+
 type AgentWorklogEntry = {
   id: string;
   agentName: string;
@@ -68,6 +104,7 @@ type AgentWorklogEntry = {
   testsRun: string[];
   followUps: string[];
   createdAt: string | number;
+  workProof?: WorkProofRecord | null;
 };
 
 export const IssueDetailDrawer = ({ issueId, projectId, open, onOpenChange }: IssueDetailDrawerProps) => {
@@ -684,11 +721,13 @@ export const IssueDetailDrawer = ({ issueId, projectId, open, onOpenChange }: Is
                               {entry.agentName} · {format(new Date(entry.createdAt), "MMM d, h:mm a")}
                             </p>
                           </div>
+                          {entry.workProof && <WorkProofBadge proof={entry.workProof} />}
                         </div>
                         <WorklogList icon={<GitBranch size={14} />} label="Files changed" items={entry.changedFiles} />
                         <WorklogList icon={<TerminalSquare size={14} />} label="Commands" items={entry.commandsRun} />
                         <WorklogList icon={<FlaskConical size={14} />} label="Validation" items={entry.testsRun} />
                         <WorklogList icon={<ListPlus size={14} />} label="Follow-ups" items={entry.followUps} />
+                        {entry.workProof && <WorkProofPanel proof={entry.workProof} />}
                       </div>
                     ))}
                   </div>
@@ -778,6 +817,160 @@ const WorklogList = ({ icon, label, items }: { icon: React.ReactNode; label: str
           </li>
         ))}
       </ul>
+    </div>
+  );
+};
+
+const WORK_PROOF_BADGE_STYLES: Record<WorkProofVerdict, { label: string; className: string; Icon: React.ComponentType<{ size?: number }> }> = {
+  green: {
+    label: "Verified by FlowBoard",
+    className: "border-emerald-500/40 bg-emerald-500/15 text-emerald-200",
+    Icon: ShieldCheck,
+  },
+  red: {
+    label: "Verification failed",
+    className: "border-red-500/40 bg-red-500/15 text-red-200",
+    Icon: ShieldAlert,
+  },
+  unverified: {
+    label: "Unverified",
+    className: "border-amber-500/40 bg-amber-500/15 text-amber-200",
+    Icon: ShieldQuestion,
+  },
+};
+
+const WorkProofBadge = ({ proof }: { proof: WorkProofRecord }) => {
+  const style = WORK_PROOF_BADGE_STYLES[proof.verdict] ?? WORK_PROOF_BADGE_STYLES.unverified;
+  const { Icon } = style;
+  return (
+    <span
+      title={`Hash: ${proof.proofHash.slice(0, 12)}… · Chain #${proof.chainIndex}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${style.className}`}
+    >
+      <Icon size={12} />
+      {style.label}
+    </span>
+  );
+};
+
+const CHECK_LABELS: Array<{ key: "tests" | "lint" | "typecheck" | "build"; label: string }> = [
+  { key: "tests", label: "Tests" },
+  { key: "lint", label: "Lint" },
+  { key: "typecheck", label: "Typecheck" },
+  { key: "build", label: "Build" },
+];
+
+const CHECK_PILL_STYLES: Record<WorkProofCheckStatus, string> = {
+  pass: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+  fail: "border-red-500/40 bg-red-500/10 text-red-200",
+  missing: "border-white/10 bg-background/40 text-muted-foreground",
+};
+
+const WorkProofPanel = ({ proof }: { proof: WorkProofRecord }) => {
+  const [open, setOpen] = useState(false);
+  const finishedAt = proof.finishedAt ? new Date(proof.finishedAt) : null;
+  const runtime = proof.runtimeMs !== null && proof.runtimeMs !== undefined ? `${Math.round(proof.runtimeMs / 100) / 10}s` : null;
+  return (
+    <div className="mt-4 rounded-md border border-white/10 bg-background/40">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs text-foreground/80 hover:bg-white/5"
+      >
+        <span className="flex items-center gap-2 font-medium uppercase text-muted-foreground">
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <Fingerprint size={14} />
+          WorkProof evidence
+        </span>
+        <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          {proof.agentModel && <span>{proof.agentModel}</span>}
+          {runtime && <span>·</span>}
+          {runtime && <span>{runtime}</span>}
+          {finishedAt && <span>·</span>}
+          {finishedAt && <span>{format(finishedAt, "MMM d, h:mm a")}</span>}
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-white/10 px-3 py-3">
+          <div className="flex flex-wrap gap-2">
+            {CHECK_LABELS.map(({ key, label }) => {
+              const status = proof.checks[key] ?? "missing";
+              return (
+                <span
+                  key={key}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] ${CHECK_PILL_STYLES[status]}`}
+                >
+                  {label}: {status}
+                </span>
+              );
+            })}
+          </div>
+
+          {(proof.gitCommitSha || proof.gitDiffHashAfter || proof.gitDiffHashBefore) && (
+            <div className="rounded border border-white/10 bg-background/55 p-2 text-[11px] text-muted-foreground">
+              {proof.gitCommitSha && (
+                <div>
+                  <span className="text-foreground/70">commit </span>
+                  <code className="font-mono">{proof.gitCommitSha.slice(0, 16)}</code>
+                </div>
+              )}
+              {proof.gitDiffHashAfter && (
+                <div>
+                  <span className="text-foreground/70">diff </span>
+                  <code className="font-mono">{proof.gitDiffHashAfter.slice(0, 24)}</code>
+                  {proof.gitDiffHashBefore && (
+                    <>
+                      <span className="text-foreground/70"> from </span>
+                      <code className="font-mono">{proof.gitDiffHashBefore.slice(0, 24)}</code>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {proof.commandResults.length > 0 && (
+            <div>
+              <div className="mb-1 text-[11px] font-medium uppercase text-muted-foreground">Command results</div>
+              <ul className="space-y-1.5">
+                {proof.commandResults.map((result, index) => (
+                  <li key={index} className="rounded border border-white/10 bg-background/55 px-2 py-1.5 text-[11px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <code className="truncate font-mono text-foreground/80">{result.command}</code>
+                      <span className={result.exitCode === 0 ? "text-emerald-300" : "text-red-300"}>
+                        exit {result.exitCode}
+                      </span>
+                    </div>
+                    {(result.stderrTail || result.stdoutTail) && (
+                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-muted-foreground">
+                        {result.stderrTail || result.stdoutTail}
+                      </pre>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {Object.keys(proof.environment).length > 0 && (
+            <div className="text-[11px] text-muted-foreground">
+              <span className="text-foreground/70">env </span>
+              {Object.entries(proof.environment).map(([key, value], index, all) => (
+                <span key={key}>
+                  <code className="font-mono">{key}={value}</code>
+                  {index < all.length - 1 ? " · " : ""}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="text-[10px] text-muted-foreground">
+            <span>chain #{proof.chainIndex}</span>
+            <span> · </span>
+            <code className="font-mono">hash {proof.proofHash.slice(0, 16)}…</code>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

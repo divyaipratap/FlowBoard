@@ -12,6 +12,17 @@ import {
 } from "./schema";
 import { FLOWBOARD_MCP_TOOLS } from "./agentTools";
 import { emitFlowBoardEvent } from "./events";
+import {
+  createWorkProof,
+  latestGreenWorkProofForIssue,
+  listWorkProofsByWorklogIds,
+  listWorkProofsForIssue,
+  parseWorkProofInput,
+  type WorkProofInput,
+  type WorkProofRecord,
+} from "./workProof";
+
+export { listWorkProofsForIssue };
 
 export type AgentPermissionMode = "suggest-only" | "trusted";
 
@@ -31,6 +42,7 @@ export type AgentBridgePermissions = {
   attachWorkSummaries: "approval" | "allow" | "never";
   createFollowUps: "approval" | "allow" | "never";
   requireWorkSummaryToMarkDone: boolean;
+  requireGreenWorkProofToMarkDone: boolean;
 };
 
 type AgentToolContext = {
@@ -53,6 +65,7 @@ const DEFAULT_SETTINGS: AgentBridgeSettings = {
     attachWorkSummaries: "approval",
     createFollowUps: "approval",
     requireWorkSummaryToMarkDone: true,
+    requireGreenWorkProofToMarkDone: false,
   },
 };
 
@@ -153,13 +166,14 @@ function normalizeProposal(proposal: typeof agentInboxProposalsTable.$inferSelec
   };
 }
 
-function normalizeWorklog(entry: typeof agentWorklogEntriesTable.$inferSelect) {
+function normalizeWorklog(entry: typeof agentWorklogEntriesTable.$inferSelect, workProof?: WorkProofRecord | null) {
   return {
     ...entry,
     changedFiles: parseJsonList(entry.changedFiles),
     commandsRun: parseJsonList(entry.commandsRun),
     testsRun: parseJsonList(entry.testsRun),
     followUps: parseJsonList(entry.followUps),
+    workProof: workProof ?? null,
   };
 }
 
@@ -170,10 +184,16 @@ export async function listAgentWorklogEntries(issueId: string) {
     .from(agentWorklogEntriesTable)
     .where(eq(agentWorklogEntriesTable.issueId, issueId))
     .orderBy(desc(agentWorklogEntriesTable.createdAt));
-  return entries.map(normalizeWorklog);
+  const proofs = await listWorkProofsByWorklogIds(entries.map((entry) => entry.id));
+  return entries.map((entry) => normalizeWorklog(entry, proofs.get(entry.id) ?? null));
 }
 
-async function createAgentWorklogEntry(issue: typeof issuesTable.$inferSelect, input: Record<string, unknown>, agentName: string) {
+async function createAgentWorklogEntry(
+  issue: typeof issuesTable.$inferSelect,
+  input: Record<string, unknown>,
+  agentName: string,
+  workProofInput?: WorkProofInput | null,
+) {
   const db = getDb();
   const [entry] = await db.insert(agentWorklogEntriesTable).values({
     id: randomUUID(),
@@ -186,9 +206,21 @@ async function createAgentWorklogEntry(issue: typeof issuesTable.$inferSelect, i
     testsRun: safeJson(parseStringList(input.testsRun)),
     followUps: safeJson(parseStringList(input.followUps)),
   }).returning();
+
+  let workProof: WorkProofRecord | null = null;
+  if (workProofInput) {
+    workProof = await createWorkProof({
+      worklogId: entry.id,
+      issueId: issue.id,
+      projectId: issue.projectId,
+      agentName,
+      input: workProofInput,
+    });
+  }
+
   await db.update(issuesTable).set({ updatedAt: new Date() }).where(eq(issuesTable.id, issue.id));
   emitFlowBoardEvent({ type: "issue.updated", issueId: issue.id, projectId: issue.projectId, status: issue.status });
-  return normalizeWorklog(entry);
+  return normalizeWorklog(entry, workProof);
 }
 
 async function createInboxProposal(input: {
@@ -343,9 +375,10 @@ export async function approveAgentInboxProposal(proposalId: string) {
     if (proposal.proposalType === "work_summary") {
       const issue = await findIssueByIdOrKey(proposal.issueId);
       if (!issue) throw new Error("Issue not found");
-      const worklog = await createAgentWorklogEntry(issue, payload, proposal.agentName);
+      const workProofInput = parseWorkProofInput(payload.workProof);
+      const worklog = await createAgentWorklogEntry(issue, payload, proposal.agentName, workProofInput);
       const comment = await createAppliedComment(proposal.issueId, `Agent work summary added by ${proposal.agentName}: ${worklog.summary}`, proposal.agentName);
-      result = { applied: true, worklogId: worklog.id, commentId: comment.id };
+      result = { applied: true, worklogId: worklog.id, commentId: comment.id, workProofId: worklog.workProof?.id ?? null };
       emitFlowBoardEvent({ type: "comment.created", issueId: proposal.issueId, projectId: proposal.projectId });
     } else {
       const comment = await createAppliedComment(proposal.issueId, String(payload.content ?? proposal.description ?? ""), proposal.agentName);
@@ -469,9 +502,15 @@ async function writeDecision(action: WriteAction) {
 
 async function canMarkDone(issueId: string) {
   const settings = await getAgentBridgeSettings();
-  if (!settings.permissions.requireWorkSummaryToMarkDone) return true;
-  const entries = await listAgentWorklogEntries(issueId);
-  return entries.length > 0;
+  if (settings.permissions.requireWorkSummaryToMarkDone) {
+    const entries = await listAgentWorklogEntries(issueId);
+    if (entries.length === 0) return false;
+  }
+  if (settings.permissions.requireGreenWorkProofToMarkDone) {
+    const proof = await latestGreenWorkProofForIssue(issueId);
+    if (!proof) return false;
+  }
+  return true;
 }
 
 async function findIssueByIdOrKey(issueIdOrKey: string) {
@@ -679,7 +718,7 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
         return result;
       }
       if (decision === "allowed" && status === "done" && !(await canMarkDone(issue.id))) {
-        const result = { applied: false, approvalRequired: true, reason: "Trusted completion requires an Agent Worklog summary before marking done.", proposedStatus: status, currentStatus: issue.status };
+        const result = { applied: false, approvalRequired: true, reason: "Trusted completion requires an Agent Worklog summary (and a green WorkProof if your rules require it) before marking done.", proposedStatus: status, currentStatus: issue.status };
         const proposal = await createInboxProposal({
           agentName,
           toolName,
@@ -721,6 +760,7 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
       if (!issue) throw new Error("Issue not found");
       const content = workSummaryContent(args);
       if (!String(args.summary ?? "").trim()) throw new Error("summary is required");
+      const workProofInput = parseWorkProofInput(args.workProof);
       const decision = await writeDecision("attachWorkSummaries");
       if (decision === "rejected") {
         const result = { applied: false, allowed: false, reason: "Attaching work summaries is disabled by Agent Rules." };
@@ -744,17 +784,18 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
             testsRun: parseStringList(args.testsRun),
             followUps: parseStringList(args.followUps),
             content,
+            workProof: workProofInput ? args.workProof : null,
           },
         });
-        const result = { applied: false, approvalRequired: true, proposalId: proposal.id, summary: content };
+        const result = { applied: false, approvalRequired: true, proposalId: proposal.id, summary: content, workProofAttached: workProofInput !== null };
         await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Attach work summary", status: "suggested", input: args, result });
         return result;
       }
-      const worklog = await createAgentWorklogEntry(issue, args, agentName);
+      const worklog = await createAgentWorklogEntry(issue, args, agentName, workProofInput);
       const comment = await createAppliedComment(issue.id, `Agent work summary added by ${agentName}: ${worklog.summary}`, agentName);
       emitFlowBoardEvent({ type: "comment.created", issueId: issue.id, projectId: issue.projectId });
-      await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Attach work summary", status: "applied", input: args, result: { worklogId: worklog.id, commentId: comment.id } });
-      return { applied: true, worklog, comment };
+      await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Attach work summary", status: "applied", input: args, result: { worklogId: worklog.id, commentId: comment.id, workProofId: worklog.workProof?.id ?? null } });
+      return { applied: true, worklog, comment, workProof: worklog.workProof };
     }
 
     if (toolName === "flowboard_create_followup_issue") {
