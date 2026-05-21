@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, Bot, Check, Clipboard, FolderKanban, Inbox, ListChecks, Monitor, Moon, RotateCcw, Settings as SettingsIcon, ShieldCheck, Sun, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Bell, Bot, Check, Clipboard, FolderKanban, Inbox, ListChecks, Monitor, Moon, RotateCcw, Settings as SettingsIcon, ShieldCheck, Sun, Trash2, UserRound, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,14 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { getAvatarColors, getInitials, loadProfile, LocalProfile, PROFILE_EVENT, resetProfile, saveProfile } from "@/lib/profile";
+import {
+  defaultNotificationPrefs,
+  loadNotificationPrefs,
+  NotificationPrefs,
+  PROPOSAL_KIND_LABELS,
+  ProposalKind,
+  saveNotificationPrefs,
+} from "@/lib/notification-prefs";
 import {
   getGetPulseTodayQueryKey,
   getListProjectsQueryKey,
@@ -134,6 +142,16 @@ export const Settings = () => {
   const [auditLog, setAuditLog] = useState<AgentAuditEntry[]>([]);
   const [agentInbox, setAgentInbox] = useState<AgentProposal[]>([]);
   const [mcpConfig, setMcpConfig] = useState("");
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(defaultNotificationPrefs);
+
+  useEffect(() => {
+    setNotificationPrefs(loadNotificationPrefs());
+  }, []);
+
+  const updateNotificationPrefs = (next: NotificationPrefs) => {
+    setNotificationPrefs(next);
+    saveNotificationPrefs(next);
+  };
 
   useEffect(() => {
     setSettings(loadSettings());
@@ -430,6 +448,59 @@ export const Settings = () => {
             </div>
           </div>
         </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Bell size={16} className="text-muted-foreground" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Notifications</h2>
+          </div>
+
+          <div className="glass-panel rounded-lg divide-y divide-border/70">
+            <div className="flex items-center justify-between gap-6 p-4">
+              <div className="space-y-1">
+                <Label htmlFor="mute-all-toasts" className="text-sm font-medium">Mute all agent toasts</Label>
+                <p className="text-sm text-muted-foreground">
+                  Hide toast pop-ups for every new agent proposal. The notification bell still updates.
+                  Keyboard shortcut: Ctrl+Shift+A approves the most recent pending proposal.
+                </p>
+              </div>
+              <Switch
+                id="mute-all-toasts"
+                checked={notificationPrefs.muteToasts}
+                onCheckedChange={(checked) =>
+                  updateNotificationPrefs({ ...notificationPrefs, muteToasts: checked })
+                }
+              />
+            </div>
+
+            {(Object.keys(PROPOSAL_KIND_LABELS) as ProposalKind[]).map((kind) => (
+              <div key={kind} className="flex items-center justify-between gap-6 p-4">
+                <div className="space-y-1">
+                  <Label htmlFor={`mute-${kind}`} className="text-sm font-medium">
+                    Mute {PROPOSAL_KIND_LABELS[kind]} toasts
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {kind === "work_summary"
+                      ? "Skip toasts for work summary proposals — they can be high volume."
+                      : `Skip toasts for ${PROPOSAL_KIND_LABELS[kind].toLowerCase()} proposals.`}
+                  </p>
+                </div>
+                <Switch
+                  id={`mute-${kind}`}
+                  disabled={notificationPrefs.muteToasts}
+                  checked={notificationPrefs.muteByType[kind]}
+                  onCheckedChange={(checked) =>
+                    updateNotificationPrefs({
+                      ...notificationPrefs,
+                      muteByType: { ...notificationPrefs.muteByType, [kind]: checked },
+                    })
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+
 
         <section className="space-y-4">
           <div className="flex items-center gap-2">

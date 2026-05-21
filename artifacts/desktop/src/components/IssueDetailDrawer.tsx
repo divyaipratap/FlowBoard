@@ -45,6 +45,7 @@ import { getEffortMap, isIssueInFocus, setIssueEffort, toggleFocusIssue } from "
 import { getCurrentUserName } from "@/lib/profile";
 import { useLocation } from "wouter";
 import { DEFAULT_STATUSES, getDoneStatus, getStatusLabel } from "@/lib/statuses";
+import { IssueProposalBanner } from "./IssueProposalBanner";
 
 const MAX_ATTACHMENTS_PER_ISSUE = 5;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -448,6 +449,7 @@ export const IssueDetailDrawer = ({ issueId, projectId, open, onOpenChange }: Is
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              <IssueProposalBanner issueId={selectedIssueId} />
               {/* Title */}
               <div>
                 <Input
