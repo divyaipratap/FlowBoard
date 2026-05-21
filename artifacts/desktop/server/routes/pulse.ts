@@ -5,6 +5,17 @@ import { getDb } from "../db";
 import { dailyReviewsTable, flowSessionsTable, issueSignalsTable } from "../schema";
 import { computePulseToday, getIssueProject, recomputePulse } from "../pulse/compute";
 import {
+  createPulseRecipe,
+  deletePulseRecipe,
+  executeRecipe,
+  getPulseGlobalState,
+  getPulseRecipe,
+  listPulseRecipeRuns,
+  listPulseRecipes,
+  setPulseGlobalPaused,
+  updatePulseRecipe,
+} from "../pulse/recipes";
+import {
   SaveDailyReviewBody,
   StartFlowSessionBody,
   StopFlowSessionParams,
@@ -130,6 +141,82 @@ router.post("/daily-review", async (req, res) => {
       .returning();
 
   res.json({ review: serializeReview(review) });
+});
+
+router.get("/pulse/recipes", async (_req, res) => {
+  const [recipes, global] = await Promise.all([listPulseRecipes(), getPulseGlobalState()]);
+  res.json({ recipes, global });
+});
+
+router.post("/pulse/recipes", async (req, res) => {
+  const body = (req.body || {}) as Record<string, unknown>;
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+  const recipe = await createPulseRecipe({
+    name,
+    description: typeof body.description === "string" ? body.description : null,
+    enabled: typeof body.enabled === "boolean" ? body.enabled : true,
+    agentName: typeof body.agentName === "string" ? body.agentName : undefined,
+    selector: body.selector,
+    scheduleExpr: typeof body.scheduleExpr === "string" ? body.scheduleExpr : undefined,
+    rules: body.rules,
+    proposal: body.proposal,
+  });
+  res.json({ recipe });
+});
+
+router.get("/pulse/recipes/:id", async (req, res) => {
+  const recipe = await getPulseRecipe(req.params.id);
+  if (!recipe) {
+    res.status(404).json({ error: "Recipe not found" });
+    return;
+  }
+  res.json({ recipe });
+});
+
+router.patch("/pulse/recipes/:id", async (req, res) => {
+  try {
+    const recipe = await updatePulseRecipe(req.params.id, req.body || {});
+    res.json({ recipe });
+  } catch (error) {
+    res.status(404).json({ error: error instanceof Error ? error.message : "Update failed" });
+  }
+});
+
+router.delete("/pulse/recipes/:id", async (req, res) => {
+  await deletePulseRecipe(req.params.id);
+  res.json({ ok: true });
+});
+
+router.post("/pulse/recipes/:id/run", async (req, res) => {
+  try {
+    const run = await executeRecipe(req.params.id, "manual");
+    res.json({ run });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Run failed" });
+  }
+});
+
+router.get("/pulse/runs", async (req, res) => {
+  const recipeId = typeof req.query.recipeId === "string" ? req.query.recipeId : undefined;
+  const limit = Number(req.query.limit ?? 30);
+  const runs = await listPulseRecipeRuns(recipeId, Number.isFinite(limit) ? limit : 30);
+  res.json({ runs });
+});
+
+router.get("/pulse/global", async (_req, res) => {
+  const global = await getPulseGlobalState();
+  res.json({ global });
+});
+
+router.post("/pulse/global", async (req, res) => {
+  const body = (req.body || {}) as { paused?: unknown };
+  const paused = typeof body.paused === "boolean" ? body.paused : false;
+  const global = await setPulseGlobalPaused(paused);
+  res.json({ global });
 });
 
 export default router;

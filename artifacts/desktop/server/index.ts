@@ -9,6 +9,7 @@ import pulseRouter from "./routes/pulse";
 import dataRouter from "./routes/data";
 import agentBridgeRouter from "./routes/agentBridge";
 import { eventsRouter } from "./events";
+import { seedDefaultRecipeIfMissing, startPulseRunner } from "./pulse/recipes";
 
 interface ServerOptions {
   dbPath: string;
@@ -65,5 +66,13 @@ export async function startServer({ dbPath, rendererPath, port }: ServerOptions)
   });
 
   console.log(`FlowBoard server running at http://localhost:${resolvedPort}`);
+
+  try {
+    await seedDefaultRecipeIfMissing();
+    startPulseRunner();
+  } catch (error) {
+    console.error("[pulse] failed to start runner:", error);
+  }
+
   return resolvedPort;
 }

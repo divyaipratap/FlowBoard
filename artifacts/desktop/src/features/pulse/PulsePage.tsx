@@ -10,6 +10,7 @@ import { TodayFlowCard } from "./TodayFlowCard";
 import { NextBestActionCard } from "./NextBestActionCard";
 import { RiskRadar } from "./RiskRadar";
 import { DailyReviewDialog } from "./DailyReviewDialog";
+import { RecipeAutonomyPanel } from "./RecipeAutonomyPanel";
 
 export const PulsePage = () => {
   const { data, isLoading, isError, refetch } = usePulseToday();
@@ -155,6 +156,8 @@ export const PulsePage = () => {
             </div>
             <RiskRadar risks={data.risks} />
           </section>
+
+          <RecipeAutonomyPanel />
         </aside>
       </div>
 

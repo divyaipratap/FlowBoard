@@ -251,6 +251,20 @@ async function createInboxProposal(input: {
   return normalizeProposal(proposal);
 }
 
+export async function createAgentInboxProposal(input: {
+  agentName: string;
+  toolName: string;
+  proposalType: ProposalType;
+  action: string;
+  issueId?: string | null;
+  projectId?: string | null;
+  title: string;
+  description?: string | null;
+  payload: Record<string, unknown>;
+}) {
+  return createInboxProposal(input);
+}
+
 export async function listAgentInboxProposals(status = "pending", limit = 30) {
   const db = getDb();
   const clampedLimit = Math.min(Math.max(limit, 1), 100);

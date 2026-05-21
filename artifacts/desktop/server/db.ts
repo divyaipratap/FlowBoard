@@ -178,6 +178,45 @@ export function initDb(dbPath: string): DB {
 
     CREATE INDEX IF NOT EXISTS idx_agent_work_proofs_issue
       ON agent_work_proofs(issue_id, chain_index);
+
+    CREATE TABLE IF NOT EXISTS pulse_recipes (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      agent_name TEXT NOT NULL DEFAULT 'Pulse',
+      selector TEXT NOT NULL DEFAULT '{}',
+      schedule_expr TEXT NOT NULL DEFAULT 'nightly',
+      rules TEXT NOT NULL DEFAULT '{}',
+      proposal TEXT NOT NULL DEFAULT '{}',
+      last_run_at INTEGER,
+      next_run_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS pulse_recipe_runs (
+      id TEXT PRIMARY KEY,
+      recipe_id TEXT NOT NULL,
+      triggered_by TEXT NOT NULL DEFAULT 'scheduled',
+      started_at INTEGER NOT NULL,
+      finished_at INTEGER,
+      status TEXT NOT NULL DEFAULT 'running',
+      matched_count INTEGER NOT NULL DEFAULT 0,
+      proposal_ids TEXT NOT NULL DEFAULT '[]',
+      skipped TEXT NOT NULL DEFAULT '[]',
+      errors TEXT NOT NULL DEFAULT '[]',
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pulse_recipe_runs_recipe
+      ON pulse_recipe_runs(recipe_id, started_at);
+
+    CREATE TABLE IF NOT EXISTS pulse_global (
+      id TEXT PRIMARY KEY,
+      global_paused INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `);
 
   try {

@@ -174,6 +174,48 @@ export const agentWorklogEntriesTable = sqliteTable("agent_worklog_entries", {
     .$defaultFn(() => new Date()),
 });
 
+export const pulseRecipesTable = sqliteTable("pulse_recipes", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  agentName: text("agent_name").notNull().default("Pulse"),
+  selector: text("selector").notNull().default("{}"),
+  scheduleExpr: text("schedule_expr").notNull().default("nightly"),
+  rules: text("rules").notNull().default("{}"),
+  proposal: text("proposal").notNull().default("{}"),
+  lastRunAt: integer("last_run_at", { mode: "timestamp" }),
+  nextRunAt: integer("next_run_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const pulseRecipeRunsTable = sqliteTable("pulse_recipe_runs", {
+  id: text("id").primaryKey(),
+  recipeId: text("recipe_id").notNull(),
+  triggeredBy: text("triggered_by").notNull().default("scheduled"),
+  startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
+  finishedAt: integer("finished_at", { mode: "timestamp" }),
+  status: text("status").notNull().default("running"),
+  matchedCount: integer("matched_count").notNull().default(0),
+  proposalIds: text("proposal_ids").notNull().default("[]"),
+  skipped: text("skipped").notNull().default("[]"),
+  errors: text("errors").notNull().default("[]"),
+  notes: text("notes"),
+});
+
+export const pulseGlobalTable = sqliteTable("pulse_global", {
+  id: text("id").primaryKey(),
+  globalPaused: integer("global_paused", { mode: "boolean" }).notNull().default(false),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export const agentWorkProofsTable = sqliteTable("agent_work_proofs", {
   id: text("id").primaryKey(),
   worklogId: text("worklog_id").notNull().unique(),
