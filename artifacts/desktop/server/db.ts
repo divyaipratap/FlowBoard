@@ -217,6 +217,36 @@ export function initDb(dbPath: string): DB {
       global_paused INTEGER NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    -- FAB-15: Team sync (CRDT, local-first).
+    CREATE TABLE IF NOT EXISTS sync_rooms (
+      id TEXT PRIMARY KEY,
+      label TEXT,
+      relay_url TEXT NOT NULL,
+      keychain_ref TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      last_connected_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_outbound_queue (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      envelope TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sync_outbound_room
+      ON sync_outbound_queue(room_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS sync_peer_state (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      peer_id TEXT NOT NULL,
+      last_counter INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(room_id, peer_id)
+    );
   `);
 
   try {

@@ -1,0 +1,20 @@
+{
+  "name": "@workspace/sync",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./crypto": "./src/crypto/index.ts",
+    "./transport": "./src/transport/index.ts",
+    "./engine": "./src/engine.ts"
+  },
+  "scripts": {
+    "test": "node scripts/run-sync-tests.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "~5.9.2"
+  }
+}

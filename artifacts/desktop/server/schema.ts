@@ -241,3 +241,36 @@ export const agentWorkProofsTable = sqliteTable("agent_work_proofs", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+// FAB-15 — Team sync (CRDT, local-first). See lib/sync and docs/fab-15/.
+
+export const syncRoomsTable = sqliteTable("sync_rooms", {
+  id: text("id").primaryKey(),
+  label: text("label"),
+  relayUrl: text("relay_url").notNull(),
+  keychainRef: text("keychain_ref").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  lastConnectedAt: integer("last_connected_at", { mode: "timestamp" }),
+});
+
+export const syncOutboundQueueTable = sqliteTable("sync_outbound_queue", {
+  id: text("id").primaryKey(),
+  roomId: text("room_id").notNull(),
+  envelope: text("envelope").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const syncPeerStateTable = sqliteTable("sync_peer_state", {
+  id: text("id").primaryKey(),
+  roomId: text("room_id").notNull(),
+  peerId: text("peer_id").notNull(),
+  lastCounter: integer("last_counter").notNull().default(0),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
