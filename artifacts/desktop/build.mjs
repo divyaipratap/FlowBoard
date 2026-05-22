@@ -1,6 +1,6 @@
-import { build as esbuild } from "esbuild";
+import { build as esbuild, context as esbuildContext } from "esbuild";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -10,9 +10,8 @@ const external = [
   "*.node",
 ];
 
-async function buildAll() {
-  // Build main process
-  await esbuild({
+function mainConfig() {
+  return {
     entryPoints: [path.resolve(__dirname, "electron/main.ts")],
     bundle: true,
     platform: "node",
@@ -21,10 +20,11 @@ async function buildAll() {
     external,
     sourcemap: "linked",
     logLevel: "info",
-  });
+  };
+}
 
-  // Build MCP stdio server for Cursor, Codex, and other MCP clients
-  await esbuild({
+function mcpConfig() {
+  return {
     entryPoints: [path.resolve(__dirname, "server/mcp.ts")],
     bundle: true,
     platform: "node",
@@ -33,10 +33,11 @@ async function buildAll() {
     external,
     sourcemap: "linked",
     logLevel: "info",
-  });
+  };
+}
 
-  // Build preload
-  await esbuild({
+function preloadConfig() {
+  return {
     entryPoints: [path.resolve(__dirname, "electron/preload.ts")],
     bundle: true,
     platform: "node",
@@ -45,10 +46,49 @@ async function buildAll() {
     external: ["electron"],
     sourcemap: "linked",
     logLevel: "info",
-  });
+  };
 }
 
-buildAll().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+export async function buildAll() {
+  await esbuild(mainConfig());
+  await esbuild(mcpConfig());
+  await esbuild(preloadConfig());
+}
+
+// Watch the main-process bundle (electron/main.ts + everything it imports).
+// Calls `onRebuild` after each successful incremental build. The initial build
+// is skipped here — assume the caller already ran buildAll() to seed dist/.
+export async function watchMain(onRebuild) {
+  const ctx = await esbuildContext({
+    ...mainConfig(),
+    plugins: [
+      {
+        name: "fab15-dev-watcher",
+        setup(build) {
+          let isFirst = true;
+          build.onEnd((result) => {
+            if (isFirst) {
+              isFirst = false;
+              return;
+            }
+            if (result.errors.length === 0) {
+              onRebuild();
+            } else {
+              console.error("[dev] rebuild failed:", result.errors);
+            }
+          });
+        },
+      },
+    ],
+  });
+  await ctx.watch();
+  return async () => ctx.dispose();
+}
+
+// CLI: `node build.mjs` still works for one-shot production builds.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  buildAll().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
