@@ -1,40 +1,33 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Clipboard, Link2, RefreshCw, Users, Wifi, WifiOff } from "lucide-react";
+import { Clipboard, Link2, RefreshCw, Trash2, Users, Wifi, WifiOff } from "lucide-react";
 
 type TransportState = "idle" | "connecting" | "connected" | "disconnected" | "error";
 
-type TeamSyncState = {
-  enabled: boolean;
+interface SyncRoom {
+  id: string;
+  label: string | null;
   relayUrl: string;
-  roomId: string | null;
-  pairingCode: string | null;
-  transportState: TransportState;
-  queuedMessages: number;
-  connectedPeers: number;
-};
-
-const DEFAULT_RELAY_URL = "wss://y-websocket-relay.fly.dev";
-
-const SYNC_SETTINGS_KEY = "flowboard.team-sync";
-
-function loadSyncSettings(): { enabled: boolean; relayUrl: string; roomId: string | null } {
-  try {
-    const raw = window.localStorage.getItem(SYNC_SETTINGS_KEY);
-    if (!raw) return { enabled: false, relayUrl: DEFAULT_RELAY_URL, roomId: null };
-    return { enabled: false, relayUrl: DEFAULT_RELAY_URL, roomId: null, ...JSON.parse(raw) };
-  } catch {
-    return { enabled: false, relayUrl: DEFAULT_RELAY_URL, roomId: null };
-  }
+  enabled: boolean;
+  createdAt: string;
+  lastConnectedAt: string | null;
 }
 
-function saveSyncSettings(settings: { enabled: boolean; relayUrl: string; roomId: string | null }) {
-  window.localStorage.setItem(SYNC_SETTINGS_KEY, JSON.stringify(settings));
+interface SyncStateInfo {
+  keychainAvailable: boolean;
+  roomCount: number;
+  defaultRelayUrl: string;
+}
+
+interface PendingGenerated {
+  roomId: string;
+  words: readonly string[];
+  expiresAt: string;
 }
 
 function stateColor(state: TransportState): string {
@@ -66,96 +59,206 @@ function stateLabel(state: TransportState): string {
   }
 }
 
-export function TeamSyncSettings() {
-  const [syncState, setSyncState] = useState<TeamSyncState>(() => {
-    const saved = loadSyncSettings();
-    return {
-      ...saved,
-      pairingCode: null,
-      transportState: "idle",
-      queuedMessages: 0,
-      connectedPeers: 0,
-    };
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    ...init,
   });
-  const [relayInput, setRelayInput] = useState(syncState.relayUrl);
-  const [joinCode, setJoinCode] = useState("");
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = (await res.json()) as { error?: string };
+      detail = body.error ?? "";
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || `${res.status} ${res.statusText}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
 
-  // Listen for transport state changes from SSE events.
+export function TeamSyncSettings() {
+  const [state, setState] = useState<SyncStateInfo | null>(null);
+  const [rooms, setRooms] = useState<SyncRoom[]>([]);
+  const [relayInput, setRelayInput] = useState("");
+  const [pending, setPending] = useState<PendingGenerated | null>(null);
+  const [joinRoomId, setJoinRoomId] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [transportState, setTransportState] = useState<TransportState>("idle");
+  const [connectedPeers, setConnectedPeers] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  const enabled = useMemo(() => rooms.some((room) => room.enabled), [rooms]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [info, list] = await Promise.all([
+        api<SyncStateInfo>("/api/sync/state"),
+        api<SyncRoom[]>("/api/sync/rooms"),
+      ]);
+      setState(info);
+      setRooms(list);
+      if (!relayInput) setRelayInput(info.defaultRelayUrl);
+    } catch (error) {
+      toast.error(`Sync state unavailable: ${(error as Error).message}`);
+    }
+  }, [relayInput]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  // Listen for transport state SSE events forwarded as window CustomEvents.
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail as {
         type?: string;
         transportState?: TransportState;
-        peerId?: string;
       } | undefined;
       if (!detail) return;
-
       if (detail.type === "sync.transport_state" && detail.transportState) {
-        setSyncState((prev) => ({ ...prev, transportState: detail.transportState! }));
+        setTransportState(detail.transportState);
       }
       if (detail.type === "sync.peer_connected") {
-        setSyncState((prev) => ({ ...prev, connectedPeers: prev.connectedPeers + 1 }));
+        setConnectedPeers((prev) => prev + 1);
       }
       if (detail.type === "sync.peer_disconnected") {
-        setSyncState((prev) => ({ ...prev, connectedPeers: Math.max(0, prev.connectedPeers - 1) }));
+        setConnectedPeers((prev) => Math.max(0, prev - 1));
       }
     };
-
     window.addEventListener("flowboard:sync-event", handler);
     return () => window.removeEventListener("flowboard:sync-event", handler);
   }, []);
 
-  const toggleSync = useCallback((enabled: boolean) => {
-    const next = { ...syncState, enabled };
-    setSyncState(next);
-    saveSyncSettings({ enabled, relayUrl: next.relayUrl, roomId: next.roomId });
-    if (!enabled) {
-      setSyncState((prev) => ({ ...prev, transportState: "idle", connectedPeers: 0 }));
-    }
-    toast.success(enabled ? "Team Sync enabled" : "Team Sync disabled");
-  }, [syncState]);
-
-  const saveRelay = useCallback(() => {
-    const url = relayInput.trim() || DEFAULT_RELAY_URL;
-    setRelayInput(url);
-    const next = { ...syncState, relayUrl: url };
-    setSyncState(next);
-    saveSyncSettings({ enabled: next.enabled, relayUrl: url, roomId: next.roomId });
-    toast.success("Relay URL saved");
-  }, [relayInput, syncState]);
-
-  const generatePairingCode = useCallback(() => {
-    // In production this calls PairingService.generate() via the server.
-    // For now, generate a placeholder 6-word code for the UI.
-    const words = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
-    const code = words.sort(() => Math.random() - 0.5).slice(0, 6).join("-");
-    setSyncState((prev) => ({ ...prev, pairingCode: code }));
-    toast.success("Pairing code generated — share it with your teammate");
-  }, []);
-
-  const acceptPairingCode = useCallback(() => {
-    if (!joinCode.trim()) {
-      toast.error("Enter a pairing code to join");
+  const generate = useCallback(async () => {
+    if (!state?.keychainAvailable) {
+      toast.error("OS keychain is unavailable on this device — cannot create a room");
       return;
     }
-    // In production this calls PairingService.accept() via the server.
-    const fakeRoomId = crypto.randomUUID().replace(/-/g, "").slice(0, 26);
-    const next = { ...syncState, roomId: fakeRoomId };
-    setSyncState(next);
-    saveSyncSettings({ enabled: next.enabled, relayUrl: next.relayUrl, roomId: fakeRoomId });
-    setJoinCode("");
-    toast.success("Joined room — syncing will begin shortly");
-  }, [joinCode, syncState]);
-
-  const copyPairingCode = useCallback(async () => {
-    if (!syncState.pairingCode) return;
+    setBusy(true);
     try {
-      await navigator.clipboard.writeText(syncState.pairingCode);
-      toast.success("Pairing code copied");
+      const result = await api<{
+        roomId: string;
+        words: readonly string[];
+        relayUrl: string;
+        expiresAt: string;
+      }>("/api/sync/pairing/generate", {
+        method: "POST",
+        body: JSON.stringify({ relayUrl: relayInput.trim() || undefined }),
+      });
+      setPending({
+        roomId: result.roomId,
+        words: result.words,
+        expiresAt: result.expiresAt,
+      });
+      await refresh();
+      toast.success("Pairing code generated — share both the words and the room ID");
+    } catch (error) {
+      toast.error(`Could not generate pairing code: ${(error as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [refresh, relayInput, state?.keychainAvailable]);
+
+  const acceptPairing = useCallback(async () => {
+    if (!joinRoomId.trim() || !joinCode.trim()) {
+      toast.error("Enter both the room ID and the pairing code");
+      return;
+    }
+    const words = joinCode
+      .trim()
+      .split(/[\s,-]+/u)
+      .map((word) => word.toLowerCase())
+      .filter(Boolean);
+    if (words.length !== 6) {
+      toast.error("Pairing code must be exactly 6 words");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api("/api/sync/pairing/accept", {
+        method: "POST",
+        body: JSON.stringify({
+          roomId: joinRoomId.trim(),
+          words,
+          relayUrl: relayInput.trim() || undefined,
+        }),
+      });
+      setJoinRoomId("");
+      setJoinCode("");
+      await refresh();
+      toast.success("Joined room — peer sync will activate when the engine connects");
+    } catch (error) {
+      toast.error(`Could not join: ${(error as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [joinCode, joinRoomId, refresh, relayInput]);
+
+  const toggleRoom = useCallback(
+    async (room: SyncRoom, next: boolean) => {
+      try {
+        await api(`/api/sync/rooms/${encodeURIComponent(room.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ enabled: next }),
+        });
+        await refresh();
+      } catch (error) {
+        toast.error(`Could not update room: ${(error as Error).message}`);
+      }
+    },
+    [refresh],
+  );
+
+  const removeRoom = useCallback(
+    async (room: SyncRoom) => {
+      if (!window.confirm(`Remove room ${room.label ?? room.id}? The key will remain in the OS keychain until cleared.`)) {
+        return;
+      }
+      try {
+        await api(`/api/sync/rooms/${encodeURIComponent(room.id)}`, { method: "DELETE" });
+        await refresh();
+      } catch (error) {
+        toast.error(`Could not remove room: ${(error as Error).message}`);
+      }
+    },
+    [refresh],
+  );
+
+  const copyPairing = useCallback(async () => {
+    if (!pending) return;
+    const text = `${pending.roomId}\n${pending.words.join(" ")}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Pairing details copied");
     } catch {
       toast.error("Unable to copy");
     }
-  }, [syncState.pairingCode]);
+  }, [pending]);
+
+  const updateRelayUrl = useCallback(async () => {
+    const url = relayInput.trim();
+    if (!url) return;
+    if (rooms.length === 0) {
+      toast.success("Relay URL noted — it will apply to the next room you create");
+      return;
+    }
+    try {
+      await Promise.all(
+        rooms.map((room) =>
+          api(`/api/sync/rooms/${encodeURIComponent(room.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ relayUrl: url }),
+          }),
+        ),
+      );
+      await refresh();
+      toast.success("Relay URL updated");
+    } catch (error) {
+      toast.error(`Could not update relay: ${(error as Error).message}`);
+    }
+  }, [refresh, relayInput, rooms]);
 
   return (
     <section className="space-y-4">
@@ -165,33 +268,36 @@ export function TeamSyncSettings() {
       </div>
 
       <div className="glass-panel rounded-lg divide-y divide-border/70">
-        {/* Enable / status row */}
         <div className="flex flex-wrap items-center justify-between gap-4 p-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium">Encrypted P2P sync</p>
-              <Badge variant={syncState.transportState === "connected" ? "default" : "outline"}>
-                <span className={stateColor(syncState.transportState)}>
-                  {syncState.transportState === "connected" ? <Wifi size={12} className="inline mr-1" /> : <WifiOff size={12} className="inline mr-1" />}
-                  {stateLabel(syncState.transportState)}
+              <Badge variant={transportState === "connected" ? "default" : "outline"}>
+                <span className={stateColor(transportState)}>
+                  {transportState === "connected" ? (
+                    <Wifi size={12} className="inline mr-1" />
+                  ) : (
+                    <WifiOff size={12} className="inline mr-1" />
+                  )}
+                  {stateLabel(transportState)}
                 </span>
               </Badge>
-              {syncState.queuedMessages > 0 && (
-                <Badge variant="secondary">{syncState.queuedMessages} queued</Badge>
+              {connectedPeers > 0 && (
+                <Badge variant="secondary">{connectedPeers} peer{connectedPeers === 1 ? "" : "s"}</Badge>
               )}
             </div>
             <p className="text-sm text-muted-foreground">
               Sync your board with 2–5 teammates over an encrypted relay. No server stores your data.
             </p>
+            {state && !state.keychainAvailable && (
+              <p className="text-xs text-yellow-400">
+                The OS keychain is unavailable — pairing is disabled until it can store keys.
+              </p>
+            )}
           </div>
-          <Switch
-            id="team-sync-enabled"
-            checked={syncState.enabled}
-            onCheckedChange={toggleSync}
-          />
+          <Badge variant={enabled ? "default" : "outline"}>{enabled ? "Active" : "No rooms"}</Badge>
         </div>
 
-        {/* Relay URL */}
         <div className="p-4 space-y-3">
           <div className="space-y-2">
             <Label htmlFor="relay-url">Relay URL</Label>
@@ -200,10 +306,9 @@ export function TeamSyncSettings() {
                 id="relay-url"
                 value={relayInput}
                 onChange={(e) => setRelayInput(e.target.value)}
-                placeholder={DEFAULT_RELAY_URL}
-                disabled={!syncState.enabled}
+                placeholder={state?.defaultRelayUrl ?? ""}
               />
-              <Button variant="outline" onClick={saveRelay} disabled={!syncState.enabled}>
+              <Button variant="outline" onClick={updateRelayUrl}>
                 <RefreshCw size={14} className="mr-1" />
                 Save
               </Button>
@@ -214,71 +319,103 @@ export function TeamSyncSettings() {
           </div>
         </div>
 
-        {/* Pairing */}
         <div className="p-4 space-y-4">
           <div className="flex items-center gap-2">
             <Link2 size={16} className="text-muted-foreground" />
             <p className="text-sm font-medium">Pairing</p>
           </div>
 
-          {syncState.roomId ? (
-            <div className="rounded-md border border-border/70 bg-background/35 p-3 space-y-2">
-              <p className="text-sm">
-                <span className="text-muted-foreground">Room:</span>{" "}
-                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{syncState.roomId}</code>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-md border border-border/70 bg-background/35 p-3 space-y-3">
+              <p className="text-sm font-medium">Create a room</p>
+              <p className="text-xs text-muted-foreground">
+                Generate a pairing code and share the room ID + 6 words with your teammate.
               </p>
-              <p className="text-sm text-muted-foreground">
-                {syncState.connectedPeers} peer{syncState.connectedPeers === 1 ? "" : "s"} connected
-              </p>
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Generate code (initiator) */}
-              <div className="rounded-md border border-border/70 bg-background/35 p-3 space-y-3">
-                <p className="text-sm font-medium">Create a room</p>
-                <p className="text-xs text-muted-foreground">Generate a pairing code and share it with your teammate.</p>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={generatePairingCode}
-                  disabled={!syncState.enabled}
-                >
-                  Generate code
-                </Button>
-                {syncState.pairingCode && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={generate}
+                disabled={busy || !state?.keychainAvailable}
+              >
+                Generate code
+              </Button>
+              {pending && (
+                <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-muted px-2 py-1 rounded font-mono">
-                      {syncState.pairingCode}
+                    <code className="flex-1 text-xs bg-muted px-2 py-1 rounded font-mono break-all">
+                      {pending.roomId}
                     </code>
-                    <Button size="sm" variant="ghost" onClick={copyPairingCode}>
-                      <Clipboard size={14} />
+                  </div>
+                  <code className="block text-xs bg-muted px-2 py-1 rounded font-mono">
+                    {pending.words.join(" ")}
+                  </code>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Expires {new Date(pending.expiresAt).toLocaleTimeString()}
+                    </p>
+                    <Button size="sm" variant="ghost" onClick={copyPairing}>
+                      <Clipboard size={14} className="mr-1" />
+                      Copy
                     </Button>
                   </div>
-                )}
-              </div>
-
-              {/* Join with code */}
-              <div className="rounded-md border border-border/70 bg-background/35 p-3 space-y-3">
-                <p className="text-sm font-medium">Join a room</p>
-                <p className="text-xs text-muted-foreground">Paste the code from your teammate's device.</p>
-                <Input
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value)}
-                  placeholder="alpha-bravo-charlie-delta-echo-foxtrot"
-                  disabled={!syncState.enabled}
-                />
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={acceptPairingCode}
-                  disabled={!syncState.enabled || !joinCode.trim()}
-                >
-                  Join
-                </Button>
-              </div>
+                </div>
+              )}
             </div>
-          )}
+
+            <div className="rounded-md border border-border/70 bg-background/35 p-3 space-y-3">
+              <p className="text-sm font-medium">Join a room</p>
+              <p className="text-xs text-muted-foreground">
+                Paste the room ID and 6-word code from your teammate's device.
+              </p>
+              <Input
+                value={joinRoomId}
+                onChange={(e) => setJoinRoomId(e.target.value)}
+                placeholder="fb_…"
+              />
+              <Input
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="word word word word word word"
+              />
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={acceptPairing}
+                disabled={busy || !state?.keychainAvailable || !joinRoomId.trim() || !joinCode.trim()}
+              >
+                Join
+              </Button>
+            </div>
+          </div>
         </div>
+
+        {rooms.length > 0 && (
+          <div className="p-4 space-y-3">
+            <p className="text-sm font-medium">Paired rooms</p>
+            <ul className="space-y-2">
+              {rooms.map((room) => (
+                <li
+                  key={room.id}
+                  className="rounded-md border border-border/70 bg-background/35 p-3 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded break-all">{room.id}</code>
+                    <p className="text-xs text-muted-foreground truncate">{room.relayUrl}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={room.enabled}
+                      onCheckedChange={(next) => void toggleRoom(room, next)}
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => void removeRoom(room)}>
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </section>
   );

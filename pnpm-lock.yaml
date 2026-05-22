@@ -223,6 +223,9 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
+      '@workspace/sync':
+        specifier: workspace:*
+        version: link:../../lib/sync
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0

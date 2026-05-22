@@ -22,6 +22,7 @@
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",
     "@workspace/api-zod": "workspace:*",
+    "@workspace/sync": "workspace:*",
     "better-sqlite3": "^12.9.0",
     "drizzle-orm": "catalog:",
     "express": "^5"
