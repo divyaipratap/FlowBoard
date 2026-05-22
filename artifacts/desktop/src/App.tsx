@@ -11,6 +11,7 @@ import { PulsePage } from "./features/pulse/PulsePage";
 import { useFlowBoardEvents } from "./hooks/use-flowboard-events";
 import { AgentInboxProvider, useAgentInbox } from "./contexts/AgentInboxContext";
 import { NotificationBell } from "./components/NotificationBell";
+import { StatusConflictDialog } from "./features/team-sync/StatusConflictDialog";
 
 type ThemeMode = "dark" | "light";
 
@@ -88,6 +89,7 @@ function App() {
           </Switch>
         </main>
         <ProfileSetupDialog />
+        <StatusConflictDialog />
         <Toaster theme={themeMode} position="bottom-right" />
         <GlobalApprovalShortcut />
       </div>

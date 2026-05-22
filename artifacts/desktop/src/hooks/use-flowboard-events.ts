@@ -59,6 +59,18 @@ export function useFlowBoardEvents() {
       if (payload.type === "proposal.changed") {
         window.dispatchEvent(new CustomEvent("flowboard:agent-bridge-changed"));
       }
+
+      // FAB-15: Team Sync events — dispatch to StatusConflictDialog and TeamSyncSettings.
+      if (payload.type === "sync.status_conflict") {
+        window.dispatchEvent(new CustomEvent("flowboard:sync-conflict", { detail: payload }));
+      }
+      if (
+        payload.type === "sync.transport_state" ||
+        payload.type === "sync.peer_connected" ||
+        payload.type === "sync.peer_disconnected"
+      ) {
+        window.dispatchEvent(new CustomEvent("flowboard:sync-event", { detail: payload }));
+      }
     };
 
     source.addEventListener("flowboard", refresh as EventListener);

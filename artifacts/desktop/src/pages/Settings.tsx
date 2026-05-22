@@ -30,6 +30,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { TeamSyncSettings } from "@/features/team-sync/TeamSyncSettings";
 
 const SETTINGS_KEY = "flowboard.settings";
 
@@ -685,6 +686,8 @@ export const Settings = () => {
             </div>
           </div>
         </section>
+
+        <TeamSyncSettings />
 
         <section className="space-y-4">
           <div className="flex items-center gap-2">
