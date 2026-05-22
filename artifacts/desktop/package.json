@@ -25,7 +25,8 @@
     "@workspace/sync": "workspace:*",
     "better-sqlite3": "^12.9.0",
     "drizzle-orm": "catalog:",
-    "express": "^5"
+    "express": "^5",
+    "yjs": "13.6.30"
   },
   "devDependencies": {
     "@radix-ui/react-accordion": "^1.2.12",

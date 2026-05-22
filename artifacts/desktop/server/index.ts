@@ -11,6 +11,7 @@ import agentBridgeRouter from "./routes/agentBridge";
 import syncRouter from "./routes/sync";
 import { eventsRouter } from "./events";
 import { seedDefaultRecipeIfMissing, startPulseRunner } from "./pulse/recipes";
+import { bootEnabledRooms } from "./sync/engine";
 
 interface ServerOptions {
   dbPath: string;
@@ -75,6 +76,12 @@ export async function startServer({ dbPath, rendererPath, port }: ServerOptions)
   } catch (error) {
     console.error("[pulse] failed to start runner:", error);
   }
+
+  // FAB-15 — bring up any rooms the user has already paired and enabled.
+  // Failure here must not block startup; rooms can be retried by toggling them in Settings.
+  bootEnabledRooms().catch((error) => {
+    console.error("[sync] bootEnabledRooms failed:", error);
+  });
 
   return resolvedPort;
 }

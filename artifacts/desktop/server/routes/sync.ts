@@ -27,6 +27,7 @@ import {
 } from "../sync/rooms";
 import { isKeychainAvailable } from "../sync/cipher";
 import { resolveStatusConflict } from "../sync/conflicts";
+import { getSyncEngineManager } from "../sync/engine";
 
 const DEFAULT_RELAY_URL = "wss://y-websocket-relay.fly.dev";
 
@@ -50,6 +51,11 @@ router.post("/sync/pairing/generate", async (req, res) => {
     const body = req.body as { relayUrl?: string; label?: string | null } | undefined;
     const relayUrl = (body?.relayUrl ?? "").trim() || DEFAULT_RELAY_URL;
     const result = await generate({ relayUrl, label: body?.label ?? null });
+    // Newly created room is enabled by default — start the engine so we're listening
+    // when the joiner finishes pairing on their device.
+    void getSyncEngineManager()
+      .startRoom({ id: result.roomId, relayUrl: result.relayUrl })
+      .catch((err) => console.error(`[sync] startRoom failed for ${result.roomId}:`, err));
     res.status(201).json(result);
   } catch (error) {
     if (error instanceof KeychainUnavailableError) {
@@ -79,6 +85,9 @@ router.post("/sync/pairing/accept", async (req, res) => {
       label: body.label ?? null,
     });
     clearPending(result.roomId);
+    void getSyncEngineManager()
+      .startRoom({ id: result.roomId, relayUrl: result.room.relayUrl })
+      .catch((err) => console.error(`[sync] startRoom failed for ${result.roomId}:`, err));
     res.status(201).json({ roomId: result.roomId, room: toPublic(result.room) });
   } catch (error) {
     if (error instanceof InvalidPairingCodeError) {
@@ -103,17 +112,34 @@ router.patch("/sync/rooms/:id", async (req, res) => {
     return;
   }
 
+  const manager = getSyncEngineManager();
+
   if (typeof body?.enabled === "boolean") {
     row = (await setRoomEnabled(id, body.enabled)) ?? row;
+    if (body.enabled) {
+      void manager
+        .startRoom({ id: row.id, relayUrl: row.relayUrl })
+        .catch((err) => console.error(`[sync] startRoom failed for ${row!.id}:`, err));
+    } else {
+      void manager.stopRoom(id).catch((err) => console.error(`[sync] stopRoom failed for ${id}:`, err));
+    }
   }
   if (typeof body?.relayUrl === "string" && body.relayUrl.trim().length > 0) {
     row = (await setRoomRelayUrl(id, body.relayUrl.trim())) ?? row;
+    // Relay URL changed — bounce the session so it connects to the new relay.
+    if (row.enabled) {
+      await manager.stopRoom(id).catch(() => {});
+      void manager
+        .startRoom({ id: row.id, relayUrl: row.relayUrl })
+        .catch((err) => console.error(`[sync] re-startRoom failed for ${row!.id}:`, err));
+    }
   }
 
   res.json(toPublic(row));
 });
 
 router.delete("/sync/rooms/:id", async (req, res) => {
+  await getSyncEngineManager().stopRoom(req.params.id).catch(() => {});
   const removed = await deleteRoom(req.params.id);
   if (!removed) {
     res.status(404).json({ error: "Room not found" });
