@@ -24,7 +24,7 @@ This document covers the opt-in team sync feature only. It does not cover the ex
 
 1. **Honest-but-curious relay operator.** Reads all bytes through their server. Must not learn issue contents. Must not learn membership of a room beyond what's necessary to route. Mitigation: end-to-end encryption with keys derived on-device from pairing codes the relay never sees.
 
-2. **Active network attacker (MITM).** Can drop, reorder, replay, or substitute messages. Mitigation: authenticated encryption (`crypto_secretbox`) with replay protection via monotonic counters bound by AAD. Codex specifies in Track B.
+2. **Active network attacker (MITM).** Can drop, reorder, replay, or substitute messages. Mitigation: libsodium XChaCha20-Poly1305 AEAD with replay protection via monotonic counters bound by AAD. Codex specifies in Track B.
 
 3. **Pairing-code thief.** Gains the 6-word code (shoulder surfing, screen share). For the window the code is live, can pair a device into the room. Mitigation: codes expire (~10 min) and are single-use; pairing acknowledged on the originating device with explicit user confirmation.
 
@@ -40,14 +40,15 @@ This document covers the opt-in team sync feature only. It does not cover the ex
 
 ## Key handling
 
-> **Owner: Codex (Track B).** Append this section in your PR.
->
-> Required content:
-> - Pairing code format (BIP39 6-word, entropy bits, salt source).
-> - KDF parameters (Argon2id memory/iterations/parallelism; rationale).
-> - Storage: how the room key is sealed to OS keychain via Electron `safeStorage`; what happens on first launch if keychain is unavailable.
-> - Rotation: there is no automatic rotation; document the manual re-pair flow.
-> - Replay protection envelope: nonce strategy and the AAD that prevents cross-room replay.
+Pairing codes are six words drawn uniformly from the English BIP39 wordlist. Each word selects one of 2,048 entries, so the displayed code carries 66 bits of entropy. Codes are normalized to lowercase BIP39 words before derivation and are never persisted by the crypto layer.
+
+`PeerCipher.deriveRoomKey` uses libsodium `crypto_pwhash` with Argon2id13 to derive a 32-byte room key from the normalized six-word phrase. The salt is a 16-byte BLAKE2b hash of `flowboard-sync-room-key-v1:<roomId>`, so the public 128-bit random room ID separates otherwise identical pairing codes across rooms. Production parameters are libsodium's interactive Argon2id profile: opslimit 2, memlimit 64 MiB, parallelism 1 as exposed by libsodium-wrappers. This is intentionally slow enough to make online guessing expensive while remaining acceptable for a human pairing flow on desktop hardware.
+
+Room keys are sealed with Electron `safeStorage` before disk persistence. The persisted file contains only the room ID, format version, and a `safeStorage` ciphertext blob; plaintext key bytes stay in process memory only long enough to derive, encrypt/decrypt, or hand to `safeStorage`. If `safeStorage` is unavailable or the OS keychain is locked on first launch, `loadRoomKey` returns `null` and sync must remain disabled until the user unlocks the keychain or re-pairs. `saveRoomKey` fails closed when encryption is unavailable rather than writing an unsealed key.
+
+There is no automatic key rotation in v1. Manual rotation means disabling sync for the room, generating a fresh room ID and six-word pairing code, deriving a new room key, and re-pairing the intended devices. A lost or malicious paired device must be treated as a room-key compromise until this re-pair flow completes.
+
+Envelopes use libsodium XChaCha20-Poly1305 AEAD with a fresh random 192-bit nonce per message. The relay sees only the envelope version, nonce, ciphertext, and MAC. The caller-provided AAD must include the room routing context plus sender ID and monotonic sender counter; `PeerCipher` authenticates that AAD and rejects a previously accepted AAD for the same room key. Binding room ID into key derivation plus room/sender/counter into AAD prevents ciphertext from being replayed across rooms or counters. Exact counter monotonicity is owned by `SyncEngine`; the crypto layer fails closed on MAC mismatch, AAD mismatch, version mismatch, and duplicate authenticated AAD.
 
 ## Implementation hooks
 

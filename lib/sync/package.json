@@ -10,9 +10,12 @@
     "./engine": "./src/engine.ts"
   },
   "scripts": {
-    "test": "node scripts/run-sync-tests.mjs"
+    "test": "tsc --outDir dist --rootDir src && node scripts/run-sync-tests.mjs dist"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@scure/bip39": "^2.2.0",
+    "libsodium-wrappers-sumo": "^0.8.4"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "~5.9.2"
