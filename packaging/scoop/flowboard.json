@@ -1,0 +1,35 @@
+{
+  "version": "__VERSION__",
+  "description": "Local-first project board and MCP bridge for AI coding agents.",
+  "homepage": "https://github.com/divyaipratap/FlowBoard",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "__WINDOWS_EXE_URL__",
+      "hash": "__WINDOWS_EXE_SHA256__"
+    }
+  },
+  "installer": {
+    "script": "Start-Process -Wait -FilePath \"$dir\\$fname\" -ArgumentList '/S'"
+  },
+  "uninstaller": {
+    "script": "$uninstall = Join-Path $env:LOCALAPPDATA 'Programs\\FlowBoard\\Uninstall FlowBoard.exe'; if (Test-Path $uninstall) { Start-Process -Wait -FilePath $uninstall -ArgumentList '/S' }"
+  },
+  "shortcuts": [
+    [
+      "FlowBoard.exe",
+      "FlowBoard"
+    ]
+  ],
+  "checkver": {
+    "github": "https://github.com/divyaipratap/FlowBoard"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/divyaipratap/FlowBoard/releases/download/v$version/FlowBoard%20Setup%20$version.exe"
+      }
+    }
+  }
+}
+

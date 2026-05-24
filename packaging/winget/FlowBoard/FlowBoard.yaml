@@ -1,0 +1,7 @@
+# Created with wingetcreate after replacing placeholders.
+PackageIdentifier: divyaipratap.FlowBoard
+PackageVersion: __VERSION__
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.10.0
+

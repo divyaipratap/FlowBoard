@@ -1,0 +1,23 @@
+PackageIdentifier: divyaipratap.FlowBoard
+PackageVersion: __VERSION__
+PackageLocale: en-US
+Publisher: divyaipratap
+PublisherUrl: https://github.com/divyaipratap
+PublisherSupportUrl: https://github.com/divyaipratap/FlowBoard/issues
+PackageName: FlowBoard
+PackageUrl: https://github.com/divyaipratap/FlowBoard
+License: MIT
+LicenseUrl: https://github.com/divyaipratap/FlowBoard/blob/main/LICENSE
+ShortDescription: Local-first project board and MCP bridge for AI coding agents.
+Description: FlowBoard is a local Electron app that combines project tickets, Agent Inbox approvals, WorkProof, and a stdio MCP bridge for tools such as Cursor and Codex.
+Moniker: flowboard
+Tags:
+  - ai
+  - mcp
+  - cursor
+  - codex
+  - project-management
+  - productivity
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0
+

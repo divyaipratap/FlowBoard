@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.divyaipratap/flowboard",
+  "description": "Local-first FlowBoard project memory and MCP Agent Bridge for AI coding agents.",
+  "repository": {
+    "url": "https://github.com/divyaipratap/FlowBoard",
+    "source": "github"
+  },
+  "version": "__VERSION__",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "__MCP_NPM_PACKAGE__",
+      "version": "__VERSION__",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "FLOWBOARD_API_PORT_FILE",
+          "description": "Path to the FlowBoard desktop app API port JSON file.",
+          "isRequired": true,
+          "format": "filepath",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
+
