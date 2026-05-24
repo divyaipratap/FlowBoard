@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { agentWorklogEntriesTable, issuesTable, commentsTable, projectsTable, attachmentsTable } from "../schema";
 import { emitFlowBoardEvent } from "../events";
+import { listAssignmentsForIssue, listAssignmentsForIssues } from "../orchestration/assignments";
 import {
   CreateIssueBody,
   CreateIssueParams,
@@ -72,7 +73,15 @@ router.get("/projects/:projectId/issues", async (req, res) => {
     .groupBy(commentsTable.issueId);
   const cMap = Object.fromEntries(commentCounts.map((c) => [c.issueId, Number(c.count)]));
 
-  res.json(issues.map((i) => ({ ...i, labels: parseLabels(i.labels), issueKey: issueKey(project.key, i.issueNumber), commentCount: cMap[i.id] ?? 0 })));
+  const assignmentsMap = await listAssignmentsForIssues(issues.map((i) => i.id));
+
+  res.json(issues.map((i) => ({
+    ...i,
+    labels: parseLabels(i.labels),
+    issueKey: issueKey(project.key, i.issueNumber),
+    commentCount: cMap[i.id] ?? 0,
+    roleAssignments: assignmentsMap.get(i.id) ?? [],
+  })));
 });
 
 router.post("/projects/:projectId/issues", async (req, res) => {
@@ -124,8 +133,9 @@ router.get("/issues/:issueId", async (req, res) => {
 
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, issue.projectId));
   const comments = await db.select().from(commentsTable).where(eq(commentsTable.issueId, issueId)).orderBy(commentsTable.createdAt);
+  const roleAssignments = await listAssignmentsForIssue(issueId);
 
-  res.json({ ...issue, labels: parseLabels(issue.labels), issueKey: issueKey(project?.key ?? "PROJ", issue.issueNumber), commentCount: comments.length, comments });
+  res.json({ ...issue, labels: parseLabels(issue.labels), issueKey: issueKey(project?.key ?? "PROJ", issue.issueNumber), commentCount: comments.length, comments, roleAssignments });
 });
 
 router.patch("/issues/:issueId", async (req, res) => {

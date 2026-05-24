@@ -12,6 +12,7 @@ import {
 import { createAgentInboxProposal } from "../agentBridge";
 import { emitFlowBoardEvent } from "../events";
 import { computeNextRunAt, parseScheduleExpr } from "./schedule";
+import { listAssignmentsForIssues } from "../orchestration/assignments";
 
 export type RecipeSelector = {
   statuses?: string[];
@@ -21,6 +22,17 @@ export type RecipeSelector = {
   projectId?: string | null;
   maxIssues?: number;
   skipIfPendingProposalExists?: boolean;
+  /**
+   * FAB-12: target tickets that have a specific (agent, role) assignment.
+   * If both agentName and role are set, both must match. Either one may be
+   * omitted to match all agents or all roles. `status` filters the assignment
+   * status (e.g. only "ready" or "in_progress"). All omitted = no role filter.
+   */
+  roleBinding?: {
+    role?: "implementer" | "reviewer" | "tester" | "planner";
+    agentName?: string;
+    status?: "pending" | "ready" | "in_progress" | "done" | "rejected";
+  };
 };
 
 export type RecipeRules = {
@@ -127,7 +139,7 @@ function normalizeStrings(value: unknown): string[] {
 
 function normalizeSelector(raw: unknown): RecipeSelector {
   const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return {
+  const out: RecipeSelector = {
     statuses: normalizeStrings(obj.statuses).length ? normalizeStrings(obj.statuses) : DEFAULT_SELECTOR.statuses,
     priorities: normalizeStrings(obj.priorities).length ? normalizeStrings(obj.priorities) : DEFAULT_SELECTOR.priorities,
     types: normalizeStrings(obj.types).length ? normalizeStrings(obj.types) : DEFAULT_SELECTOR.types,
@@ -139,6 +151,22 @@ function normalizeSelector(raw: unknown): RecipeSelector {
         ? obj.skipIfPendingProposalExists
         : DEFAULT_SELECTOR.skipIfPendingProposalExists,
   };
+  // FAB-12 — role binding selector
+  if (obj.roleBinding && typeof obj.roleBinding === "object") {
+    const rb = obj.roleBinding as Record<string, unknown>;
+    const role = typeof rb.role === "string" ? rb.role : undefined;
+    const agentName = typeof rb.agentName === "string" && rb.agentName.trim() ? rb.agentName.trim() : undefined;
+    const status = typeof rb.status === "string" ? rb.status : undefined;
+    if (role || agentName || status) {
+      type RoleBinding = NonNullable<RecipeSelector["roleBinding"]>;
+      out.roleBinding = {
+        ...(role ? { role: role as RoleBinding["role"] } : {}),
+        ...(agentName ? { agentName } : {}),
+        ...(status ? { status: status as RoleBinding["status"] } : {}),
+      };
+    }
+  }
+  return out;
 }
 
 function normalizeRules(raw: unknown): RecipeRules {
@@ -353,15 +381,31 @@ async function findCandidateIssues(selector: RecipeSelector) {
       })
     : issues;
 
+  // FAB-12 — narrow by role binding if specified.
+  let roleFiltered = filtered;
+  if (selector.roleBinding) {
+    const ids = filtered.map((i) => i.id);
+    const map = await listAssignmentsForIssues(ids);
+    roleFiltered = filtered.filter((issue) => {
+      const assignments = map.get(issue.id) ?? [];
+      return assignments.some((a) => {
+        if (selector.roleBinding!.role && a.role !== selector.roleBinding!.role) return false;
+        if (selector.roleBinding!.agentName && a.agentName !== selector.roleBinding!.agentName) return false;
+        if (selector.roleBinding!.status && a.status !== selector.roleBinding!.status) return false;
+        return true;
+      });
+    });
+  }
+
   const priorityRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-  filtered.sort((a, b) => {
+  roleFiltered.sort((a, b) => {
     const pa = priorityRank[a.priority] ?? 9;
     const pb = priorityRank[b.priority] ?? 9;
     if (pa !== pb) return pa - pb;
     return (b.updatedAt?.getTime() ?? 0) - (a.updatedAt?.getTime() ?? 0);
   });
 
-  return filtered.slice(0, selector.maxIssues ?? 3);
+  return roleFiltered.slice(0, selector.maxIssues ?? 3);
 }
 
 async function pendingProposalIssueIds(): Promise<Set<string>> {

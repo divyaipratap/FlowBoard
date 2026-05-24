@@ -21,6 +21,10 @@ import {
   type WorkProofInput,
   type WorkProofRecord,
 } from "./workProof";
+import { gateToolCall } from "./orchestration/gate";
+import { advanceHandoff, activeRoleFor, listAssignmentsForIssue } from "./orchestration/assignments";
+import { recordFieldWrite } from "./orchestration/fieldWrites";
+import type { TrackedField } from "./orchestration/roles";
 
 export { listWorkProofsForIssue };
 
@@ -657,13 +661,25 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
     if (toolName === "flowboard_start_issue") {
       const issue = await findIssueByIdOrKey(String(args.issueId ?? args.issueKey ?? ""));
       if (!issue) throw new Error("Issue not found");
+      const gate = await gateToolCall({
+        agentName,
+        toolName,
+        issueId: issue.id,
+        fieldsToWrite: ["status", "assignee"],
+      });
+      if (gate.kind === "deny") {
+        const result = { applied: false, allowed: false, reason: gate.reason };
+        await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Reject by role", status: "rejected", input: args, result });
+        return result;
+      }
       const decision = await writeDecision("updateStatus");
-      if (decision === "rejected") {
+      const effectiveDecision = gate.kind === "force-proposal" ? "approval" : decision;
+      if (effectiveDecision === "rejected") {
         const result = { applied: false, allowed: false, reason: "Starting issues is disabled by Agent Rules." };
         await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Reject start issue", status: "rejected", input: args, result });
         return result;
       }
-      if (decision === "approval") {
+      if (effectiveDecision === "approval") {
       const proposal = await createInboxProposal({
           agentName,
           toolName,
@@ -672,14 +688,18 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
           issueId: issue.id,
           projectId: issue.projectId,
           title: `Start ${String(args.issueKey ?? issue.id)}`,
-          description: `Move this issue to in_progress and assign it to ${agentName}.`,
+          description: gate.kind === "force-proposal"
+            ? `Move this issue to in_progress and assign it to ${agentName}.\n\n${gate.reason}`
+            : `Move this issue to in_progress and assign it to ${agentName}.`,
           payload: { status: "in_progress", assignee: agentName },
         });
-        const result = { applied: false, approvalRequired: true, proposalId: proposal.id, proposedStatus: "in_progress" };
+        const result = { applied: false, approvalRequired: true, proposalId: proposal.id, proposedStatus: "in_progress", ...(gate.kind === "force-proposal" ? { conflict: gate.reason } : {}) };
         await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Start issue", status: "suggested", input: args, result });
         return result;
       }
       const [updated] = await db.update(issuesTable).set({ status: "in_progress", assignee: agentName, updatedAt: new Date() }).where(eq(issuesTable.id, issue.id)).returning();
+      await recordFieldWrite({ issueId: issue.id, fieldName: "status", agentName, role: gate.role, value: updated.status });
+      await recordFieldWrite({ issueId: issue.id, fieldName: "assignee", agentName, role: gate.role, value: updated.assignee });
       const result = { applied: true, issue: normalizeIssue(updated, await projectForIssue(updated)) };
       emitFlowBoardEvent({ type: "issue.updated", issueId: updated.id, projectId: updated.projectId, status: updated.status });
       await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Start issue", status: "applied", input: args, result: { status: updated.status } });
@@ -691,6 +711,12 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
       if (!issue) throw new Error("Issue not found");
       const content = String(args.note ?? "").trim();
       if (!content) throw new Error("note is required");
+      const gate = await gateToolCall({ agentName, toolName, issueId: issue.id });
+      if (gate.kind === "deny") {
+        const result = { applied: false, allowed: false, reason: gate.reason };
+        await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Reject by role", status: "rejected", input: args, result });
+        return result;
+      }
       const decision = await writeDecision("addNotes");
       if (decision === "rejected") {
         const result = { applied: false, allowed: false, reason: "Adding notes is disabled by Agent Rules." };
@@ -724,14 +750,26 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
       if (!issue) throw new Error("Issue not found");
       const status = String(args.status ?? "").trim();
       if (!status) throw new Error("status is required");
+      const gate = await gateToolCall({
+        agentName,
+        toolName,
+        issueId: issue.id,
+        fieldsToWrite: ["status"],
+      });
+      if (gate.kind === "deny") {
+        const result = { applied: false, allowed: false, reason: gate.reason };
+        await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Reject by role", status: "rejected", input: args, result });
+        return result;
+      }
       const action = status === "done" ? "markDone" : "updateStatus";
       const decision = await writeDecision(action);
-      if (decision === "rejected") {
+      const effectiveDecision = gate.kind === "force-proposal" ? "approval" : decision;
+      if (effectiveDecision === "rejected") {
         const result = { applied: false, allowed: false, reason: `${status === "done" ? "Marking done" : "Status updates"} are disabled by Agent Rules.` };
         await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Reject status update", status: "rejected", input: args, result });
         return result;
       }
-      if (decision === "allowed" && status === "done" && !(await canMarkDone(issue.id))) {
+      if (effectiveDecision === "allowed" && status === "done" && !(await canMarkDone(issue.id))) {
         const result = { applied: false, approvalRequired: true, reason: "Trusted completion requires an Agent Worklog summary (and a green WorkProof if your rules require it) before marking done.", proposedStatus: status, currentStatus: issue.status };
         const proposal = await createInboxProposal({
           agentName,
@@ -747,7 +785,7 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
         await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Require worklog before done", status: "suggested", input: args, result: { ...result, proposalId: proposal.id } });
         return { ...result, proposalId: proposal.id };
       }
-      if (decision === "approval") {
+      if (effectiveDecision === "approval") {
         const proposal = await createInboxProposal({
           agentName,
           toolName,
@@ -756,14 +794,17 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
           issueId: issue.id,
           projectId: issue.projectId,
           title: `Change status to ${status}`,
-          description: `Current status is ${issue.status}.`,
+          description: gate.kind === "force-proposal"
+            ? `Current status is ${issue.status}.\n\n${gate.reason}`
+            : `Current status is ${issue.status}.`,
           payload: { status },
         });
-        const result = { applied: false, approvalRequired: true, proposalId: proposal.id, proposedStatus: status, currentStatus: issue.status };
+        const result = { applied: false, approvalRequired: true, proposalId: proposal.id, proposedStatus: status, currentStatus: issue.status, ...(gate.kind === "force-proposal" ? { conflict: gate.reason } : {}) };
         await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Update issue status", status: "suggested", input: args, result });
         return result;
       }
       const [updated] = await db.update(issuesTable).set({ status, updatedAt: new Date() }).where(eq(issuesTable.id, issue.id)).returning();
+      await recordFieldWrite({ issueId: issue.id, fieldName: "status", agentName, role: gate.role, value: updated.status });
       emitFlowBoardEvent({ type: "issue.updated", issueId: updated.id, projectId: updated.projectId, status: updated.status });
       await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Update issue status", status: "applied", input: args, result: { status } });
       return { applied: true, issue: normalizeIssue(updated, await projectForIssue(updated)) };
@@ -775,6 +816,12 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
       const content = workSummaryContent(args);
       if (!String(args.summary ?? "").trim()) throw new Error("summary is required");
       const workProofInput = parseWorkProofInput(args.workProof);
+      const gate = await gateToolCall({ agentName, toolName, issueId: issue.id });
+      if (gate.kind === "deny") {
+        const result = { applied: false, allowed: false, reason: gate.reason };
+        await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Reject by role", status: "rejected", input: args, result });
+        return result;
+      }
       const decision = await writeDecision("attachWorkSummaries");
       if (decision === "rejected") {
         const result = { applied: false, allowed: false, reason: "Attaching work summaries is disabled by Agent Rules." };
@@ -808,8 +855,19 @@ export async function runFlowBoardTool(toolName: string, args: Record<string, un
       const worklog = await createAgentWorklogEntry(issue, args, agentName, workProofInput);
       const comment = await createAppliedComment(issue.id, `Agent work summary added by ${agentName}: ${worklog.summary}`, agentName);
       emitFlowBoardEvent({ type: "comment.created", issueId: issue.id, projectId: issue.projectId });
-      await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Attach work summary", status: "applied", input: args, result: { worklogId: worklog.id, commentId: comment.id, workProofId: worklog.workProof?.id ?? null } });
-      return { applied: true, worklog, comment, workProof: worklog.workProof };
+
+      // Handoff: if this agent has an active assignment on this issue, advance.
+      let handoff: Awaited<ReturnType<typeof advanceHandoff>> | null = null;
+      if (gate.role) {
+        const assignments = await listAssignmentsForIssue(issue.id);
+        const mine = assignments.find((a) => a.agentName === agentName && a.role === gate.role && (a.status === "ready" || a.status === "in_progress"));
+        if (mine) {
+          handoff = await advanceHandoff({ assignmentId: mine.id, pass: true, notes: String(args.summary ?? "").slice(0, 500) });
+        }
+      }
+
+      await auditLog({ agentName, toolName, issueId: issue.id, projectId: issue.projectId, action: "Attach work summary", status: "applied", input: args, result: { worklogId: worklog.id, commentId: comment.id, workProofId: worklog.workProof?.id ?? null, handoff } });
+      return { applied: true, worklog, comment, workProof: worklog.workProof, handoff };
     }
 
     if (toolName === "flowboard_create_followup_issue") {

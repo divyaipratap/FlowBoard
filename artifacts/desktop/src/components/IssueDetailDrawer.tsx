@@ -46,6 +46,7 @@ import { getCurrentUserName } from "@/lib/profile";
 import { useLocation } from "wouter";
 import { DEFAULT_STATUSES, getDoneStatus, getStatusLabel } from "@/lib/statuses";
 import { IssueProposalBanner } from "./IssueProposalBanner";
+import { RoleAssignmentsPanel } from "@/features/orchestration/RoleAssignmentsPanel";
 
 const MAX_ATTACHMENTS_PER_ISSUE = 5;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -696,6 +697,10 @@ export const IssueDetailDrawer = ({ issueId, projectId, open, onOpenChange }: Is
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div className="pt-4 border-t border-border">
+                <RoleAssignmentsPanel issueId={selectedIssueId} />
               </div>
 
               <div className="space-y-3 pt-4 border-t border-border">

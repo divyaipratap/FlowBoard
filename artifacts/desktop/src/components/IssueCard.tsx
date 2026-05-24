@@ -6,10 +6,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { getInitials } from "@/lib/profile";
 import { getPriorityColor, getTypeIcon } from "./issue-visuals";
+import { RoleAssignmentAvatars, type RoleAssignment } from "@/features/orchestration/RoleAssignmentAvatars";
 
 export const IssueCard = ({ issue, projectId }: { issue: Issue; projectId: string }) => {
-  const issueWithDetails = issue as Issue & { description?: string };
+  const issueWithDetails = issue as Issue & { description?: string; roleAssignments?: RoleAssignment[] };
   const labels = Array.isArray(issue.labels) ? issue.labels.slice(0, 2) : [];
+  const roleAssignments = issueWithDetails.roleAssignments ?? [];
   const updatedAt = issue.updatedAt ? new Date(issue.updatedAt) : null;
   const updatedLabel = updatedAt && !Number.isNaN(updatedAt.getTime())
     ? updatedAt.toLocaleDateString(undefined, { month: "short", day: "numeric" })
@@ -31,12 +33,16 @@ export const IssueCard = ({ issue, projectId }: { issue: Issue; projectId: strin
               {issue.title}
             </p>
           </div>
-          <div className="shrink-0 mt-0.5">
-            <Avatar className="h-6 w-6 border border-border">
-              <AvatarFallback className="text-[10px] bg-white/10 text-muted-foreground">
-                {issue.assignee ? getInitials(issue.assignee) : "?"}
-              </AvatarFallback>
-            </Avatar>
+          <div className="shrink-0 mt-0.5 flex items-center gap-2">
+            {roleAssignments.length > 0 ? (
+              <RoleAssignmentAvatars assignments={roleAssignments} size="sm" max={3} />
+            ) : (
+              <Avatar className="h-6 w-6 border border-border">
+                <AvatarFallback className="text-[10px] bg-white/10 text-muted-foreground">
+                  {issue.assignee ? getInitials(issue.assignee) : "?"}
+                </AvatarFallback>
+              </Avatar>
+            )}
           </div>
         </div>
 

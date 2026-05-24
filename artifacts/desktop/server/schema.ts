@@ -241,3 +241,46 @@ export const agentWorkProofsTable = sqliteTable("agent_work_proofs", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+// FAB-12 — Multi-agent orchestration (agent + role pairs).
+//
+// Each row is one (issueId, agentName, role) assignment. An issue can have many.
+// The combination is unique so the same agent can't take two roles on one issue.
+
+export const issueRoleAssignmentsTable = sqliteTable("issue_role_assignments", {
+  id: text("id").primaryKey(),
+  issueId: text("issue_id").notNull(),
+  projectId: text("project_id").notNull(),
+  agentName: text("agent_name").notNull(),
+  /** implementer | reviewer | tester | planner */
+  role: text("role").notNull(),
+  /** pending | ready | in_progress | done | rejected */
+  status: text("status").notNull().default("pending"),
+  /** Free-form note carried through the handoff (e.g. reviewer feedback). */
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  completedAt: integer("completed_at", { mode: "timestamp" }),
+});
+
+// FAB-12 — Field-write tracking for conflict policy.
+//
+// One row per (issueId, fieldName). Updated whenever any writer changes a
+// tracked field. The MCP layer uses this to detect "two agents racing on the
+// same field" — second writer is forced into a proposal even in trusted mode.
+
+export const issueFieldWritesTable = sqliteTable("issue_field_writes", {
+  id: text("id").primaryKey(),
+  issueId: text("issue_id").notNull(),
+  fieldName: text("field_name").notNull(),
+  lastWriterAgentName: text("last_writer_agent_name"),
+  lastWriterRole: text("last_writer_role"),
+  lastValue: text("last_value"),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});

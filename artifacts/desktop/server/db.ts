@@ -217,6 +217,41 @@ export function initDb(dbPath: string): DB {
       global_paused INTEGER NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS issue_role_assignments (
+      id TEXT PRIMARY KEY,
+      issue_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      notes TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      completed_at INTEGER
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_issue_role_assignments_unique
+      ON issue_role_assignments(issue_id, agent_name, role);
+
+    CREATE INDEX IF NOT EXISTS idx_issue_role_assignments_issue
+      ON issue_role_assignments(issue_id);
+
+    CREATE INDEX IF NOT EXISTS idx_issue_role_assignments_agent_role
+      ON issue_role_assignments(agent_name, role, status);
+
+    CREATE TABLE IF NOT EXISTS issue_field_writes (
+      id TEXT PRIMARY KEY,
+      issue_id TEXT NOT NULL,
+      field_name TEXT NOT NULL,
+      last_writer_agent_name TEXT,
+      last_writer_role TEXT,
+      last_value TEXT,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_issue_field_writes_unique
+      ON issue_field_writes(issue_id, field_name);
   `);
 
   try {
