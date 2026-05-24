@@ -17,6 +17,7 @@
     "make:linux": "pnpm run build && electron-builder --linux",
     "dev": "node dev.mjs",
     "test:agent-bridge": "node scripts/run-agent-bridge-tests.mjs",
+    "test:sync-bridge": "node scripts/run-sync-bridge-tests.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

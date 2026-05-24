@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { attachmentsTable, commentsTable, issuesTable, projectStatusesTable, projectsTable } from "../schema";
+import { getSyncEngineManager } from "../sync/engine";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -105,6 +106,11 @@ router.post("/projects", async (req, res) => {
     .returning();
   await replaceProjectStatuses(project.id, body.statuses?.length ? body.statuses : DEFAULT_STATUSES);
   res.status(201).json({ ...project, issueCount: 0 });
+  getSyncEngineManager().applyLocalChange({
+    kind: "project.upsert",
+    projectId: project.id,
+    fields: { name: project.name, description: project.description, color: project.color },
+  });
 });
 
 router.get("/projects/:projectId", async (req, res) => {
@@ -134,6 +140,15 @@ router.patch("/projects/:projectId", async (req, res) => {
   }
   const [cnt] = await db.select({ count: sql<number>`count(*)` }).from(issuesTable).where(eq(issuesTable.projectId, projectId));
   res.json({ ...updated, issueCount: Number(cnt?.count ?? 0) });
+  getSyncEngineManager().applyLocalChange({
+    kind: "project.upsert",
+    projectId: updated.id,
+    fields: {
+      ...(body.name !== undefined ? { name: updated.name } : {}),
+      ...(body.description !== undefined ? { description: updated.description } : {}),
+      ...(body.color !== undefined ? { color: updated.color } : {}),
+    },
+  });
 });
 
 router.delete("/projects/:projectId", async (req, res) => {

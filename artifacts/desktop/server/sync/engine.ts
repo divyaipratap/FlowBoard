@@ -16,11 +16,12 @@
 
 import { randomBytes } from "node:crypto";
 import * as Y from "yjs";
-import type { Envelope, PeerCipher, RelayTransport, RoomId, TransportState } from "@workspace/sync";
+import type { Envelope, LocalChange, PeerCipher, RelayTransport, RoomId, TransportState } from "@workspace/sync";
 import { WebSocketRelayTransport } from "@workspace/sync/transport";
 import { emitFlowBoardEvent } from "../events";
 import { getPeerCipher } from "./cipher";
 import { listRooms, touchConnected } from "./rooms";
+import { applyLocalChangeToDoc, attachRemoteToSqliteBridge } from "./bridge";
 
 function encodeAad(roomId: string): Uint8Array {
   return new TextEncoder().encode(`room=${roomId}`);
@@ -38,10 +39,12 @@ export class RoomSyncSession {
 
   private offMessage: (() => void) | null = null;
   private offState: (() => void) | null = null;
+  private detachBridge: (() => void) | null = null;
   private onDocUpdate: ((update: Uint8Array, origin: unknown) => void) | null = null;
   private started = false;
   private stopping = false;
   private hasBroadcastInitial = false;
+  private lastRemotePeerId: string | null = null;
 
   constructor(opts: {
     roomId: RoomId;
@@ -68,6 +71,10 @@ export class RoomSyncSession {
       void this.broadcastUpdate(update);
     };
     this.doc.on("update", this.onDocUpdate);
+
+    // Wire the SQLite ↔ Y.Doc bridge so remote updates land in SQLite and
+    // emit issue.updated / comment.created / project.changed SSE events.
+    this.detachBridge = attachRemoteToSqliteBridge(this.doc, () => this.lastRemotePeerId);
 
     this.offMessage = this.transport.onMessage((envelope) => {
       void this.applyRemoteEnvelope(envelope);
@@ -103,11 +110,13 @@ export class RoomSyncSession {
     try {
       this.offMessage?.();
       this.offState?.();
+      this.detachBridge?.();
       if (this.onDocUpdate) this.doc.off("update", this.onDocUpdate);
       await this.transport.disconnect();
     } finally {
       this.offMessage = null;
       this.offState = null;
+      this.detachBridge = null;
       this.onDocUpdate = null;
       this.started = false;
       this.stopping = false;
@@ -122,6 +131,15 @@ export class RoomSyncSession {
 
   queuedCount(): number {
     return this.transport.queuedCount();
+  }
+
+  /**
+   * Mirror a local SQLite mutation into the Y.Doc, which triggers the
+   * doc.on("update") handler with origin === undefined → broadcast to peers.
+   */
+  applyLocalChange(change: LocalChange): void {
+    if (!this.started) return;
+    applyLocalChangeToDoc(this.doc, change);
   }
 
   private async broadcastUpdate(update: Uint8Array): Promise<void> {
@@ -192,6 +210,22 @@ class SyncEngineManager {
     if (!session) return;
     this.sessions.delete(roomId);
     await session.stop();
+  }
+
+  /**
+   * Broadcast a local SQLite change to every active room.
+   * Called from issue/comment/project routes after their DB write succeeds.
+   * No-op if no rooms are active — sync is opt-in.
+   */
+  applyLocalChange(change: LocalChange): void {
+    if (this.sessions.size === 0) return;
+    for (const session of this.sessions.values()) {
+      try {
+        session.applyLocalChange(change);
+      } catch (error) {
+        console.error(`[sync] applyLocalChange failed for room ${session.roomId}:`, error);
+      }
+    }
   }
 
   getSession(roomId: string): RoomSyncSession | null {

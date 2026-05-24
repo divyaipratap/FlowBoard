@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { agentWorklogEntriesTable, issuesTable, commentsTable, projectsTable, attachmentsTable } from "../schema";
 import { emitFlowBoardEvent } from "../events";
+import { getSyncEngineManager } from "../sync/engine";
 import {
   CreateIssueBody,
   CreateIssueParams,
@@ -111,6 +112,19 @@ router.post("/projects/:projectId/issues", async (req, res) => {
 
   res.status(201).json({ ...issue, labels: parseLabels(issue.labels), issueKey: issueKey(project.key, issueNumber), commentCount: 0 });
   emitFlowBoardEvent({ type: "issue.created", issueId: issue.id, projectId, status: issue.status });
+  getSyncEngineManager().applyLocalChange({
+    kind: "issue.upsert",
+    issueId: issue.id,
+    fields: {
+      title: issue.title,
+      description: issue.description,
+      status: issue.status,
+      priority: issue.priority,
+      type: issue.type,
+      assignee: issue.assignee,
+      labels: parseLabels(issue.labels),
+    },
+  });
 });
 
 router.get("/issues/:issueId", async (req, res) => {
@@ -147,6 +161,19 @@ router.patch("/issues/:issueId", async (req, res) => {
 
   res.json({ ...updated, labels: parseLabels(updated.labels), issueKey: issueKey(project?.key ?? "PROJ", updated.issueNumber), commentCount: Number(cnt?.count ?? 0) });
   emitFlowBoardEvent({ type: "issue.updated", issueId: updated.id, projectId: updated.projectId, status: updated.status });
+  getSyncEngineManager().applyLocalChange({
+    kind: "issue.upsert",
+    issueId: updated.id,
+    fields: {
+      ...(body.title !== undefined ? { title: updated.title } : {}),
+      ...(body.description !== undefined ? { description: updated.description } : {}),
+      ...(body.status !== undefined ? { status: updated.status } : {}),
+      ...(body.priority !== undefined ? { priority: updated.priority } : {}),
+      ...(body.type !== undefined ? { type: updated.type } : {}),
+      ...(body.assignee !== undefined ? { assignee: updated.assignee } : {}),
+      ...(body.labels !== undefined ? { labels: parseLabels(updated.labels) } : {}),
+    },
+  });
 });
 
 router.delete("/issues/:issueId", async (req, res) => {
@@ -159,6 +186,7 @@ router.delete("/issues/:issueId", async (req, res) => {
   await db.delete(issuesTable).where(eq(issuesTable.id, issueId));
   res.status(204).send();
   emitFlowBoardEvent({ type: "issue.deleted", issueId, projectId: issue?.projectId ?? null });
+  getSyncEngineManager().applyLocalChange({ kind: "issue.delete", issueId });
 });
 
 router.get("/issues/:issueId/comments", async (req, res) => {
@@ -180,6 +208,13 @@ router.post("/issues/:issueId/comments", async (req, res) => {
   res.status(201).json(comment);
   const [issue] = await db.select().from(issuesTable).where(eq(issuesTable.id, issueId));
   emitFlowBoardEvent({ type: "comment.created", issueId, projectId: issue?.projectId ?? null });
+  getSyncEngineManager().applyLocalChange({
+    kind: "comment.create",
+    commentId: comment.id,
+    issueId,
+    content: comment.content,
+    author: comment.author,
+  });
 });
 
 router.delete("/comments/:commentId", async (req, res) => {
