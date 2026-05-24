@@ -1,0 +1,26 @@
+# FlowBoard rules — Senior reviewer
+#
+# Every write tool requires explicit approval. Marking done is gated on both
+# a work summary and a green WorkProof. Use this when an agent is new to the
+# repo or for any project where you want every state change to land via the
+# Agent Inbox.
+
+version: 1
+permissionMode: suggest-only
+allowedAgents:
+  - Codex
+  - Cursor
+  - MCP Agent
+  - Claude Code
+disableWrites: false
+permissions:
+  readTickets: allow
+  createTickets: approval
+  updateStatus: approval
+  markDone: approval
+  addNotes: approval
+  attachWorkSummaries: approval
+  createFollowUps: approval
+  requireWorkSummaryToMarkDone: true
+  requireGreenWorkProofToMarkDone: true
+  requirePrMergedToMarkDone: false

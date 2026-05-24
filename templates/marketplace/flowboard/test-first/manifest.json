@@ -1,0 +1,15 @@
+{
+  "id": "flowboard/test-first",
+  "name": "Test-first rules",
+  "description": "Pulse recipe that nightly highlights tickets recently moved to in_progress without a work summary that mentions tests. Pairs naturally with require-green-WorkProof.",
+  "version": "1.0.0",
+  "author": {
+    "name": "FlowBoard",
+    "url": "https://github.com/divyaipratap/FlowBoard",
+    "verified": true
+  },
+  "tags": ["tests", "quality", "pulse"],
+  "files": {
+    "recipes": ["recipes/test-first-nightly.yml"]
+  }
+}

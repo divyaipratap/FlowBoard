@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowboard.app/schemas/rules.schema.json",
+  "title": "FlowBoard rules.yml",
+  "description": "Agent Bridge policy: per-tool permissions and gating rules.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "permissions"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [
+        1
+      ]
+    },
+    "permissionMode": {
+      "type": "string",
+      "enum": [
+        "suggest-only",
+        "trusted"
+      ]
+    },
+    "allowedAgents": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "disableWrites": {
+      "type": "boolean"
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readTickets",
+        "createTickets",
+        "updateStatus",
+        "markDone",
+        "addNotes",
+        "attachWorkSummaries",
+        "createFollowUps"
+      ],
+      "properties": {
+        "readTickets": {
+          "enum": [
+            "allow",
+            "never"
+          ]
+        },
+        "createTickets": {
+          "enum": [
+            "approval",
+            "allow",
+            "never"
+          ]
+        },
+        "updateStatus": {
+          "enum": [
+            "approval",
+            "allow",
+            "never"
+          ]
+        },
+        "markDone": {
+          "enum": [
+            "approval",
+            "allow",
+            "never"
+          ]
+        },
+        "addNotes": {
+          "enum": [
+            "approval",
+            "allow",
+            "never"
+          ]
+        },
+        "attachWorkSummaries": {
+          "enum": [
+            "approval",
+            "allow",
+            "never"
+          ]
+        },
+        "createFollowUps": {
+          "enum": [
+            "approval",
+            "allow",
+            "never"
+          ]
+        },
+        "requireWorkSummaryToMarkDone": {
+          "type": "boolean"
+        },
+        "requireGreenWorkProofToMarkDone": {
+          "type": "boolean"
+        },
+        "requirePrMergedToMarkDone": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

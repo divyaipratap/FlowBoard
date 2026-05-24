@@ -8,6 +8,7 @@ import aiRouter from "./routes/ai";
 import pulseRouter from "./routes/pulse";
 import dataRouter from "./routes/data";
 import agentBridgeRouter from "./routes/agentBridge";
+import marketplaceRouter from "./routes/marketplace";
 import { eventsRouter } from "./events";
 import { seedDefaultRecipeIfMissing, startPulseRunner } from "./pulse/recipes";
 
@@ -50,6 +51,7 @@ export async function startServer({ dbPath, rendererPath, port }: ServerOptions)
   app.use("/api", pulseRouter);
   app.use("/api", dataRouter);
   app.use("/api", agentBridgeRouter);
+  app.use("/api", marketplaceRouter);
   app.use("/api", eventsRouter);
 
   app.get("/api/healthz", (_req, res) => res.json({ status: "ok" }));

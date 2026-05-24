@@ -1,0 +1,15 @@
+{
+  "id": "flowboard/refactor-only",
+  "name": "Refactor-only rules",
+  "description": "Locks the bridge into approval-only mode and requires a green WorkProof before done. Designed for refactor sprints where the agent is rewriting existing code, not adding features.",
+  "version": "1.0.0",
+  "author": {
+    "name": "FlowBoard",
+    "url": "https://github.com/divyaipratap/FlowBoard",
+    "verified": true
+  },
+  "tags": ["refactor", "safety", "workproof"],
+  "files": {
+    "rules": "rules.yml"
+  }
+}

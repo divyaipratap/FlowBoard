@@ -1,0 +1,28 @@
+# FlowBoard rules — Refactor-only
+#
+# Refactor sprints have a different risk profile than feature work: there's
+# no new behavior to test against, so the agent's safety net is "did I break
+# anything that already worked?" That makes WorkProof gating critical.
+#
+# This profile blocks new ticket creation and follow-ups (refactor scope is
+# fixed) and forces every status change through approval.
+
+version: 1
+permissionMode: suggest-only
+allowedAgents:
+  - Codex
+  - Cursor
+  - MCP Agent
+  - Claude Code
+disableWrites: false
+permissions:
+  readTickets: allow
+  createTickets: never
+  updateStatus: approval
+  markDone: approval
+  addNotes: approval
+  attachWorkSummaries: allow
+  createFollowUps: never
+  requireWorkSummaryToMarkDone: true
+  requireGreenWorkProofToMarkDone: true
+  requirePrMergedToMarkDone: false

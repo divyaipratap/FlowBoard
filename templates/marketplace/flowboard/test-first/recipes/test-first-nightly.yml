@@ -1,0 +1,34 @@
+# FlowBoard recipe — Test-first nightly
+#
+# Targets in_progress tickets and asks Pulse to drop a note prompting the
+# author to confirm tests landed. Disabled by default after install — flip
+# it on in Settings → Pulse once you've reviewed the selector.
+
+version: 1
+name: "Test-first: nightly nudge for in-progress tickets"
+description: >-
+  Picks up to three high-priority in-progress tickets each night and posts a
+  proposal asking whether tests were added. The user approves or rejects from
+  the Agent Inbox.
+enabled: false
+agentName: Pulse
+scheduleExpr: nightly
+selector:
+  statuses: ["in_progress"]
+  priorities: ["critical", "high"]
+  types: ["task", "feature", "bug"]
+  labels: []
+  maxIssues: 3
+  skipIfPendingProposalExists: true
+rules:
+  mustOpenProposal: true
+  mustProduceWorkProof: false
+  dryRun: false
+proposal:
+  kind: issue_note
+  template: |
+    Test-first check on {date}:
+
+    This ticket is in_progress on {recipeName}. Did the latest change include
+    tests for the new behavior? If yes, attach a WorkProof with `tests`. If no,
+    flag the ticket back to todo so the author can add coverage first.

@@ -1,0 +1,15 @@
+{
+  "id": "flowboard/docs-only",
+  "name": "Docs-only rules",
+  "description": "Approval mode for write tools, no merged-PR gate, no test gate. Built for docs sprints where Markdown changes don't need code-level checks but still want every state change reviewed.",
+  "version": "1.0.0",
+  "author": {
+    "name": "FlowBoard",
+    "url": "https://github.com/divyaipratap/FlowBoard",
+    "verified": true
+  },
+  "tags": ["docs", "lightweight"],
+  "files": {
+    "rules": "rules.yml"
+  }
+}

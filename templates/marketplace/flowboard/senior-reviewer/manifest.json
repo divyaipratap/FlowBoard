@@ -1,0 +1,15 @@
+{
+  "id": "flowboard/senior-reviewer",
+  "name": "Senior reviewer rules",
+  "description": "Approval-required for every write tool, requires a work summary AND a green WorkProof before a ticket can be marked done. The defaults a senior reviewer would set up for a new team.",
+  "version": "1.0.0",
+  "author": {
+    "name": "FlowBoard",
+    "url": "https://github.com/divyaipratap/FlowBoard",
+    "verified": true
+  },
+  "tags": ["review", "safety", "workproof"],
+  "files": {
+    "rules": "rules.yml"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "updatedAt": "2026-05-24",
+  "publishers": [
+    {
+      "id": "flowboard",
+      "name": "FlowBoard",
+      "url": "https://github.com/divyaipratap/FlowBoard",
+      "publicKey": "REPLACE_WITH_BASE64_ED25519_SPKI",
+      "addedAt": "2026-05-24",
+      "rationale": "First-party publisher. Curates the starter pack and reviews community submissions."
+    }
+  ]
+}

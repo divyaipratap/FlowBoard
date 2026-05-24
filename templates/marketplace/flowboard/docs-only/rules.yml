@@ -1,0 +1,25 @@
+# FlowBoard rules — Docs-only
+#
+# Docs work has a tighter feedback loop: a typo fix doesn't need a test
+# suite to land. This profile keeps every state change in approval mode but
+# drops the WorkProof and PR-merged gates so a docs PR can flow naturally.
+
+version: 1
+permissionMode: suggest-only
+allowedAgents:
+  - Codex
+  - Cursor
+  - MCP Agent
+  - Claude Code
+disableWrites: false
+permissions:
+  readTickets: allow
+  createTickets: approval
+  updateStatus: approval
+  markDone: approval
+  addNotes: allow
+  attachWorkSummaries: allow
+  createFollowUps: approval
+  requireWorkSummaryToMarkDone: false
+  requireGreenWorkProofToMarkDone: false
+  requirePrMergedToMarkDone: false
